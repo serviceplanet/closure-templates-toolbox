@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package nl.serviceplanet.maven.closureteemplatecompiler;
+package nl.serviceplanet.maven.closureteemplate;
 
 import com.google.common.io.ByteSink;
 import com.google.common.io.Files;
@@ -30,7 +30,7 @@ import java.util.Optional;
  * 
  * It uses a reflection hack to do so. We can't simply call it's main method because it in turn calls a method which 
  * calls {@code System.exit()}. We also can't only extend {@code AbstractSoyCompiler} because it needs to call 
- * private methods.
+ * private methods such as {@code SoyFileSet#compileToJar()}.
  * 
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */

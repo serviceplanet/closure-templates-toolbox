@@ -22,9 +22,9 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>nl.serviceplanet.maven</groupId>
-	<artifactId>closure-template-compiler-maven-plugin</artifactId>
+	<artifactId>closure-template-maven-plugin</artifactId>
 	<name>Closure Template (Soy) Maven Plugin</name>
-	<description>Maven plugin to make the Closure Template (Soy) compiler easier to use with Maven.</description>
+	<description>Maven plugin to use Closure Template (Soy) with Maven.</description>
 	<version>1.0.0-SNAPSHOT</version>
 	<packaging>maven-plugin</packaging>
 	
