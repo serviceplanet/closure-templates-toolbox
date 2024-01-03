@@ -46,7 +46,8 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 	
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
-	
+
+	/** Contents are passed to the {@code SoyToJbcSrcCompiler} as arguments of the {@code --srcs} flag.*/
 	@Parameter(property = "soySources")
 	private String soySources;
 
