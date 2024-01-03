@@ -1,4 +1,4 @@
-= Closure Templates (Soy) Maven Plugin
+# Closure Templates (Soy) Maven Plugin
 
 Plugin to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven. 
 
