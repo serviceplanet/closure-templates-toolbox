@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package nl.serviceplanet.maven.closureteemplate;
+package nl.serviceplanet.maven.closureteemplates;
 
 import com.google.common.io.ByteSink;
 import com.google.common.io.Files;

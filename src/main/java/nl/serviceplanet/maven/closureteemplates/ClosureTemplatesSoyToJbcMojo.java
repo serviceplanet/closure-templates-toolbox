@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package nl.serviceplanet.maven.closureteemplate;
+package nl.serviceplanet.maven.closureteemplates;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -32,14 +32,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Provides a Maven goal to invoke the Closure Template (Soy) compiler to compile templates to JVM byte code. The
+ * Provides a Maven goal to invoke the Closure Templates (Soy) compiler to compile templates to JVM byte code. The
  * resulting bytecode is then written in to the {@code target/classes} directory where Maven expects to find
  * class files (which contain bytecode).
  * 
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */
 @Mojo(name = "soy-to-bytecode", defaultPhase = LifecyclePhase.VERIFY)
-public final class ClosureTemplateSoyToJbcMojo extends AbstractMojo {
+public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 
 	/** Soy compiler CLI flag to specify which Soy source files to compile. */
 	private static final String SRCS_FLAG = "--srcs";
