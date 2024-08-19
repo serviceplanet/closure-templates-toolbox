@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package nl.serviceplanet.maven.closureteemplates;
+package nl.serviceplanet.closuretemplates.toolbox.maven;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -24,7 +24,6 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,17 +36,21 @@ import java.util.zip.ZipInputStream;
  * Provides a Maven goal to invoke the Closure Templates (Soy) compiler to compile templates to JVM byte code. The
  * resulting bytecode is then written in to the {@code target/classes} directory where Maven expects to find
  * class files (which contain bytecode).
- * 
+ *
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */
 @Mojo(name = "soy-to-bytecode", defaultPhase = LifecyclePhase.VERIFY)
 public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 
-	/** Soy compiler CLI flag to specify which Soy source files to compile. */
+	/**
+	 * Soy compiler CLI flag to specify which Soy source files to compile.
+	 */
 	private static final String SRCS_FLAG = "--srcs";
-	/** Soy compiler CLI flag to specify which JAR files to add to the classpath when compiling externs. */
+	/**
+	 * Soy compiler CLI flag to specify which JAR files to add to the classpath when compiling externs.
+	 */
 	private static final String JAVA_EXTERN_DEFN_JARS_FLAG = "--java_extern_defn_jars";
-	
+
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
 
@@ -60,6 +63,14 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 	private String soySources;
 
 	/**
+	 * List of Soy (Closure Templates) template files on which to work.
+	 * <br /><br />
+	 * Contents are passed to the {@code SoyToJbcSrcCompiler} as arguments of the {@code --srcs} flag.
+	 */
+	@Parameter(property = "soySourcesBasePath")
+	private String soySourcesBasePath;
+
+	/**
 	 * List of Java JAR files which contain code which is referenced by externs (i.e. Closure Templates style plugins).
 	 * Needed when compiling Closure Templates externs.
 	 * <br /><br />
@@ -68,15 +79,17 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 	@Parameter(property = "javaExternDefnJars")
 	private String javaExternDefnJars;
 
-	/** Output location where we (temporarily) store the JAR which {@code SoyToJbcSrcCompiler} creates. */
+	/**
+	 * Output location where we (temporarily) store the JAR which {@code SoyToJbcSrcCompiler} creates.
+	 */
 	private Path compiledTemplatesJar = null;
-	
+
 	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {		 
+	public void execute() throws MojoExecutionException, MojoFailureException {
 		try {
 			try {
 				compiledTemplatesJar = Files.createTempFile("soy-bytecode", ".jar");
-				getLog().debug(String.format("Using temporary file '%s' for soy compiler output.", 
+				getLog().debug(String.format("Using temporary file '%s' for soy compiler output.",
 						compiledTemplatesJar.toString()));
 			} catch (Exception e) {
 				throw new MojoExecutionException("Unable to create temporary file for compiled templates.", e);
@@ -118,9 +131,21 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 	 * Generates the "command line" flags and arguments we are going to pass to the Soy compiler.
 	 */
 	private List<String> generateCliFlags() {
+		String allSoySources = "";
+		if (soySourcesBasePath != null && !soySourcesBasePath.isBlank()) {
+			allSoySources += SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath));
+		}
+		if (soySources != null && !soySources.isBlank()) {
+			if (!allSoySources.isEmpty()) {
+				allSoySources += ",";
+			}
+			allSoySources += soySources;
+		}
+
+
 		List<String> compilerCliArgs = new ArrayList<>();
 		compilerCliArgs.add(SRCS_FLAG);
-		compilerCliArgs.add(soySources);
+		compilerCliArgs.add(allSoySources);
 
 		if (javaExternDefnJars != null && !javaExternDefnJars.isBlank()) {
 			compilerCliArgs.add(JAVA_EXTERN_DEFN_JARS_FLAG);
@@ -129,31 +154,27 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 
 		return compilerCliArgs;
 	}
-	
+
 	private void extractJar(Path jarFile, Path extractTarget) throws IOException {
 		byte[] buffer = new byte[1024];
-		try (InputStream inputStream = Files.newInputStream(jarFile);
-			 ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
-			ZipEntry zipEntry = zipInputStream.getNextEntry();
-			
-			while (zipEntry != null) {
+		try (ZipInputStream zipInputStream = new ZipInputStream(Files.newInputStream(jarFile))) {
+			for (ZipEntry zipEntry; (zipEntry = zipInputStream.getNextEntry()) != null; ) {
 				Path newPath = Path.of(extractTarget.normalize().toString(), zipEntry.getName());
 				if (zipEntry.getName().contains("META-INF")) {
 					getLog().debug(String.format("%s - Not extracting.", newPath));
-					// We only want classes and resources in the target class directory.
-					zipEntry = zipInputStream.getNextEntry();
-					continue;
+					continue; // We only want classes and resources in the target class directory.
 				}
+
 				getLog().debug(String.format("%s - Extracting", newPath));
-				
+
 				if (zipEntry.isDirectory()) {
 					if (Files.exists(newPath) && !Files.isDirectory(newPath)) {
-						throw new IOException(String.format("Path '%s' exists but is not a directory and should be a directory according to the ZIP file.", 
+						throw new IOException(String.format("Path '%s' exists but is not a directory and should be a directory according to the ZIP file.",
 								newPath));
-					} else {
-						if (!Files.exists(newPath)) {
-							Files.createDirectories(newPath);
-						}
+					}
+
+					if (!Files.exists(newPath)) {
+						Files.createDirectories(newPath);
 					}
 				} else {
 					// Directories don't always come before files which are in these directories in ZIP files.
@@ -161,19 +182,16 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 					if (Files.exists(newPathParent) && !Files.isDirectory(newPathParent)) {
 						throw new IOException(String.format("Path '%s' exists but is not a directory and should be a directory according to the ZIP file.",
 								newPath));
-					} else {
-						Files.createDirectories(newPathParent);
 					}
-					
+
+					Files.createDirectories(newPathParent);
+
 					try (OutputStream outputStream = Files.newOutputStream(newPath)) {
-						int len;
-						while ((len = zipInputStream.read(buffer)) > 0) {
+						for (int len; (len = zipInputStream.read(buffer)) > 0; ) {
 							outputStream.write(buffer, 0, len);
-						}					
+						}
 					}
 				}
-				
-				zipEntry = zipInputStream.getNextEntry();
 			}
 
 			zipInputStream.closeEntry();

@@ -1,0 +1,176 @@
+/*
+ * Copyright © 2024 Service Planet Rotterdam B.V. (it@ask.serviceplanet.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.serviceplanet.closuretemplates.toolbox.msgbundle;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.io.ByteSink;
+import com.google.common.io.Files;
+import com.google.template.soy.SoyFileSet;
+import com.google.template.soy.msgs.SoyMsgBundle;
+import com.google.template.soy.msgs.SoyMsgBundleHandler;
+import com.google.template.soy.msgs.SoyMsgPlugin;
+import com.google.template.soy.msgs.internal.IcuSyntaxUtils;
+import com.google.template.soy.msgs.restricted.SoyMsg;
+import com.google.template.soy.msgs.restricted.SoyMsgPart;
+import com.google.template.soy.msgs.restricted.SoyMsgPlaceholderPart;
+import com.google.template.soy.msgs.restricted.SoyMsgPluralPart;
+import com.google.template.soy.msgs.restricted.SoyMsgRawTextPart;
+import com.google.template.soy.msgs.restricted.SoyMsgSelectPart;
+
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+
+public final class PropertiesIcuGenerator {
+
+	private static final char LINE_BREAK = '\n';
+
+	private PropertiesIcuGenerator() {
+		// Not intended to be instantiated.
+	}
+
+	/**
+	 * Generates a Java properties file with ICU message format style messages.
+	 */
+	public static CharSequence generateProperties(SoyMsgBundle msgBundle) {
+		StringBuilder properties = new StringBuilder();
+
+		properties.append("# WARNING! AUTO-GENERATED AT ");
+		properties.append(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS));
+		properties.append(" BY ");
+		properties.append(PropertiesIcuGenerator.class.getName());
+		properties.append(LINE_BREAK);
+		properties.append("# N.B.: THIS FILE MUST BE REGENERATED UPON **ANY** CHANGE IN THE TEMPLATE.");
+		properties.append(LINE_BREAK);
+
+		for (SoyMsg soyMsg : msgBundle) {
+			properties.append(LINE_BREAK);
+
+			String desc = soyMsg.getDesc();
+			if (desc != null && !desc.isBlank()) {
+				if (!desc.trim().equals(desc)) {
+					throw new IllegalStateException("Ensure that msg[" + soyMsg.getId() + "].desc is trimmed, found: '" + desc + "'");
+				}
+
+				properties.append("# ");
+				properties.append(desc);
+				properties.append(LINE_BREAK);
+			}
+
+			String propValue = convertSoyMsgToPropertyValue(soyMsg);
+			if (propValue.contains("\n") || propValue.contains("\r")) {
+				throw new IllegalStateException("Ensure that msg[" + soyMsg.getId() + "].desc '" + desc + "' does not contain new-lines, found: '" + propValue + "'");
+			}
+
+			properties.append(soyMsg.getId());
+			properties.append("=");
+			properties.append(propValue);
+			properties.append(LINE_BREAK);
+		}
+
+		return properties.toString();
+	}
+
+	private static String convertSoyMsgToPropertyValue(SoyMsg soyMsg) {
+		StringBuilder val = new StringBuilder();
+
+		// Converts all plural, plural remainder and select parts to ICU syntax in Soy raw text.
+		ImmutableList<SoyMsgPart> soyMsgParts = IcuSyntaxUtils.convertMsgPartsToEmbeddedIcuSyntax(soyMsg.getParts());
+
+		for (SoyMsgPart soyMsgPart : soyMsgParts) {
+			if (soyMsgPart instanceof SoyMsgRawTextPart) {
+				val.append(((SoyMsgRawTextPart) soyMsgPart).getRawText());
+			} else if (soyMsgPart instanceof SoyMsgPlaceholderPart) {
+				val.append("#");
+			} else if (soyMsgPart instanceof SoyMsgPluralPart ||
+					soyMsgPart.getClass().getName().endsWith("PluralRemainderPart") ||
+					soyMsgPart instanceof SoyMsgSelectPart) {
+				throw new IllegalStateException("Encountered a plural, plural remainder or select part. " +
+						"These should already have been converted to ICU.");
+			} else {
+				throw new RuntimeException(String.format("Encountered unknown Soy message part: '%s'.", soyMsgPart));
+			}
+		}
+
+		return val.toString();
+	}
+
+	public record SoyMsgBundleDefinition(String propertiesFileContent, SoyMsgBundle msgBundle) {
+	}
+
+	public static SoyMsgBundleDefinition extractSoyMsgBundleFromFileSet(
+			SoyFileSet soyFileSet,
+			SoyMsgBundleHandler.OutputFileOptions options
+	) {
+		SoyMsgPlugin plugin = new PropertiesIcuMsgPlugin();
+		SoyMsgBundleHandler handler = new SoyMsgBundleHandler(plugin);
+
+		File outputFile;
+		try {
+			outputFile = File.createTempFile("soy-bundle", ".properties");
+		} catch (IOException e) {
+			throw new IllegalStateException("Failed to create temp-file");
+		}
+
+		try {
+			getInternalMethodForSoyMsgExtractor(soyFileSet).invoke(
+					soyFileSet,
+					handler,
+					options,
+					Files.asByteSink(outputFile)
+			);
+
+			SoyMsgBundle soyMsgBundle;
+			try {
+				soyMsgBundle = handler.createFromFile(outputFile);
+			} catch (Exception exc) {
+				soyMsgBundle = null;
+
+				exc.printStackTrace(); // FIXME
+			}
+
+			return new SoyMsgBundleDefinition(
+					Files.asCharSource(outputFile, StandardCharsets.UTF_8).read(),
+					soyMsgBundle
+			);
+		} catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException | IOException e) {
+			throw new IllegalStateException("Failed to create SoyMsgBundle from SoyFileSet", e);
+		} finally {
+			if (!outputFile.delete()) {
+				throw new IllegalStateException("Failed to delete temp-file");
+			}
+		}
+	}
+
+	private static Method getInternalMethodForSoyMsgExtractor(SoyFileSet soyFileSet) throws NoSuchMethodException {
+		// use non-public method, normally called by:
+		// 		main-class: SoyMsgExtractor
+		// this code needs to be independent of a command-line utility.
+
+		Method method = soyFileSet.getClass().getDeclaredMethod(
+				"extractAndWriteMsgs",
+				SoyMsgBundleHandler.class,
+				SoyMsgBundleHandler.OutputFileOptions.class,
+				ByteSink.class
+		);
+		method.setAccessible(true);
+		return method;
+	}
+}

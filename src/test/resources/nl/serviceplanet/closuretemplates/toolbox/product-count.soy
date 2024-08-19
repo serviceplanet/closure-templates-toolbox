@@ -1,0 +1,18 @@
+{namespace nl.serviceplanet}
+
+{template tmpl}
+    {@param productCount: int = 3}
+
+    {if $productCount == 0}
+        {msg desc="The user doesn't have any products."}
+            You will own nothing and be happy.
+        {/msg}
+    {else}
+        {msg desc="Show the number of products the user has."}
+            {plural $productCount}
+                {case 1}You have one product.
+                {default}You have {$productCount} products.
+            {/plural}
+        {/msg}
+    {/if}
+{/template}

@@ -1,0 +1,34 @@
+<configuration scan="true" scanPeriod="30 seconds">
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Use '%mdc' to log bundle name and version. -->
+            <pattern>%-30(%date{HH:mm:ss.SSS} [%thread]) [%level] %logger{15} %message%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>valygar.log</file>
+        <append>true</append>
+        <encoder>
+            <!-- Use '%mdc' to log bundle name and version. -->
+            <pattern>%-30(%date{ISO8601} [%thread]) [%level] %logger{15} %message%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>valygar.%i.log</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>5</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>5MB</maxFileSize>
+        </triggeringPolicy>
+    </appender>
+
+    <logger name="nl.serviceplanet" level="debug" additivity="false">
+        <appender-ref ref="console" />
+        <!--        <appender-ref ref="file" />-->
+    </logger>
+    <root level="info">
+        <appender-ref ref="console" />
+        <!--        <appender-ref ref="file" />-->
+    </root>
+</configuration>

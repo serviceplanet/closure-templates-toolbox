@@ -1,0 +1,13 @@
+{namespace nl.serviceplanet}
+
+{template tmpl}
+    {@param gender: string = 'male'}
+
+    {msg desc="Show the gender of the user."}
+        {select $gender}
+            {case 'female'}Her name is Chris.
+            {case 'male'}His name is Chris.
+            {default}Their name is Chris.
+        {/select}
+    {/msg}
+{/template}

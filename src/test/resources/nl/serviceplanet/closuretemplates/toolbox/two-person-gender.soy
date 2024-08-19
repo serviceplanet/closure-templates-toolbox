@@ -1,0 +1,29 @@
+{namespace nl.serviceplanet}
+
+{template tmpl}
+    {@param sourceGender: string = 'male'}
+    {@param targetGender: string = 'male'}
+
+    {msg desc="Two people are sharing a document"}
+        {select $sourceGender}
+            {case 'female'}
+                {select $targetGender}
+                    {case 'female'}She shared a document with her.
+                    {case 'male'}She shared a document with him.
+                    {default}She shared a document with them.
+                {/select}
+            {case 'male'}
+                {select $targetGender}
+                    {case 'female'}He shared a document with her.
+                    {case 'male'}He shared a document with him.
+                    {default}He shared a document with them.
+                {/select}
+            {default}
+                {select $targetGender}
+                    {case 'female'}They shared a document with her.
+                    {case 'male'}They shared a document with him.
+                    {default}They shared a document with them.
+                {/select}
+        {/select}
+    {/msg}
+{/template}
