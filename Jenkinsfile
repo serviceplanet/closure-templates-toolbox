@@ -110,8 +110,11 @@ pipeline {
                     configFileProvider([configFile(fileId: 'c9fdc7cf-51b3-4248-95ba-511d36cc32c2', variable: 'MAVEN_SETTINGS_XML')]) {
                         // ID of the SonarQube instance as defined in the SonarQube plugin in Jenkins.
                         withSonarQubeEnv('serviceplanet-sonarqube') {
-                            // Version of Sonar scanner comes from Service Planet Parent POM.
-                            sh 'mvn clean install sonar:sonar deploy -Dsonar.branch.name=${GIT_BRANCH} -B -s $MAVEN_SETTINGS_XML -f $POM_FILE '
+                            // -U Flag forces re-resolution of all artifacts even if they couldn't be found previously.
+                            // -B Flag enables batch mode. Disables spamming the logs with download progress among things.
+                            //
+                            // Version of Sonar scanner can be specified in Jenkins.
+                            sh 'mvn clean install sonar:sonar deploy -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $POM_FILE '
                         }
                     }
                 }
