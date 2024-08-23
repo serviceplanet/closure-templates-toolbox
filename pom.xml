@@ -109,7 +109,18 @@
 		<dependency>
 			<groupId>com.google.template</groupId>
 			<artifactId>soy</artifactId>
-			<version>2024-02-26</version>
+			<!--
+			We needed a version higher than 2024-02-24 which wasn't available. jitpack.io chocked on Closure Templates
+			so we couldn't use that. So this is a version build from a specific commit.
+
+			Either build locally with `mvn clean install` or deploy to repo with:
+
+			mvn \
+			-DskipNexusStagingDeployMojo=true \
+			-DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
+			clean source:jar deploy
+			-->
+			<version>08be442c3d233a63827e3a62aba1bb780144c433</version>
 		</dependency>
 
 		<dependency>
