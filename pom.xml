@@ -27,7 +27,7 @@
 	<description>Closure Templates (Soy) with SoyMsgPlugin and Maven-plugins.</description>
 	<version>1.0.0-SNAPSHOT</version>
 	<packaging>maven-plugin</packaging>
-	
+
 	<licenses>
 		<license>
 			<name>Apache License, Version 2.0</name>
@@ -120,7 +120,7 @@
 			-DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
 			clean source:jar deploy
 			-->
-			<version>08be442c3d233a63827e3a62aba1bb780144c433</version>
+			<version>eaf077b41a985f554fa07ba3abbe3028305cddfe</version>
 		</dependency>
 
 		<dependency>
