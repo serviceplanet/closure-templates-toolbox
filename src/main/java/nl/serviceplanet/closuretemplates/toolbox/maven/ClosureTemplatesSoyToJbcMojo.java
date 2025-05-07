@@ -15,7 +15,6 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -40,12 +39,8 @@ import java.util.zip.ZipInputStream;
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */
 @Mojo(name = "soy-to-bytecode", defaultPhase = LifecyclePhase.VERIFY)
-public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
+public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplatesCompilerMojo {
 
-	/**
-	 * Soy compiler CLI flag to specify which Soy source files to compile.
-	 */
-	private static final String SRCS_FLAG = "--srcs";
 	/**
 	 * Soy compiler CLI flag to specify which JAR files to add to the classpath when compiling externs.
 	 */
@@ -53,22 +48,6 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
-
-	/**
-	 * List of Soy (Closure Templates) template files on which to work.
-	 * <br /><br />
-	 * Contents are passed to the {@code SoyToJbcSrcCompiler} as arguments of the {@code --srcs} flag.
-	 */
-	@Parameter(property = "soySources")
-	private String soySources;
-
-	/**
-	 * List of Soy (Closure Templates) template files on which to work.
-	 * <br /><br />
-	 * Contents are passed to the {@code SoyToJbcSrcCompiler} as arguments of the {@code --srcs} flag.
-	 */
-	@Parameter(property = "soySourcesBasePath")
-	private String soySourcesBasePath;
 
 	/**
 	 * List of Java JAR files which contain code which is referenced by externs (i.e. Closure Templates style plugins).
@@ -100,6 +79,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 				EmbeddedSoyCompiler compiler = new EmbeddedSoyCompiler(compiledTemplatesJar);
 				List<String> compilerCliArgs = generateCliFlags();
 
+				getLog().debug(String.format("About to run Soy compiler with the following CLI arguments: '%s'.", compilerCliArgs));
 				int exitCode = compiler.run(compilerCliArgs.toArray(new String[]{}), System.err);
 				if (exitCode != 0) {
 					throw new MojoExecutionException(String.format("Soy compiler exited with non-zero exit code (%s).", exitCode));
@@ -109,6 +89,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 			} catch (Exception e) {
 				throw new MojoExecutionException("The 'SoyToJbcSrcCompiler' was unable to complete successfully.", e);
 			}
+			getLog().debug("Soy compiler completed successfully.");
 
 			try {
 				// Extract the generated JAR file to the classes directory in the Maven target folder.
@@ -131,21 +112,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractMojo {
 	 * Generates the "command line" flags and arguments we are going to pass to the Soy compiler.
 	 */
 	private List<String> generateCliFlags() {
-		String allSoySources = "";
-		if (soySourcesBasePath != null && !soySourcesBasePath.isBlank()) {
-			allSoySources += SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath));
-		}
-		if (soySources != null && !soySources.isBlank()) {
-			if (!allSoySources.isEmpty()) {
-				allSoySources += ",";
-			}
-			allSoySources += soySources;
-		}
-
-
-		List<String> compilerCliArgs = new ArrayList<>();
-		compilerCliArgs.add(SRCS_FLAG);
-		compilerCliArgs.add(allSoySources);
+		List<String> compilerCliArgs = generateBaseCliFlags();
 
 		if (javaExternDefnJars != null && !javaExternDefnJars.isBlank()) {
 			compilerCliArgs.add(JAVA_EXTERN_DEFN_JARS_FLAG);

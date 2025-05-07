@@ -33,16 +33,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Mojo(name = "soy-parse-info-generator", defaultPhase = LifecyclePhase.GENERATE_SOURCES)
-public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractMojo {
+public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClosureTemplatesCompilerMojo {
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
 
 	@Parameter(property = "javaPackage")
 	private String javaPackage;
-
-	@Parameter(property = "soySourcesBasePath")
-	private String soySourcesBasePath;
 
 	@Parameter(property = "outputDirectory")
 	private String outputDirectory;
@@ -64,7 +61,7 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractMoj
 	}
 
 	private List<String> generateCliFlags() {
-		List<String> args = new ArrayList<>();
+		List<String> args = generateBaseCliFlags();
 
 		args.add("--generateBuilders");
 
@@ -73,9 +70,6 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractMoj
 
 		args.add("--javaClassNameSource");
 		args.add("filename");
-
-		args.add("--srcs");
-		args.add(SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath)));
 
 		args.add("--outputDirectory");
 		args.add(outputDirectory);
