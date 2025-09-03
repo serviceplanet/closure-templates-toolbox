@@ -5,12 +5,12 @@
 pipeline {
     agent {
         node {
-            label 'openjdk17'
+            label 'openjdk21'
         }
     }
     tools {
         maven 'Maven 3.X'
-        jdk 'Local OpenJDK 17'
+        jdk 'Local OpenJDK 21'
     }
 
     environment {

@@ -15,6 +15,9 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
+import com.google.common.io.ByteSink;
+import com.google.template.soy.AbstractSoyCompiler;
+import com.google.template.soy.SoyFileSet;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -24,10 +27,11 @@ import org.apache.maven.project.MavenProject;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -162,6 +166,42 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 			}
 
 			zipInputStream.closeEntry();
+		}
+	}
+
+	/**
+	 * Allows us to call the Soy compiler from our own Maven code.
+	 *
+	 * It uses a reflection hack to do so. We can't simply call it's main method because it in turn calls a method which
+	 * calls {@code System.exit()}. We also can't only extend {@code AbstractSoyCompiler} because it needs to call
+	 * private methods such as {@code SoyFileSet#compileToJar()}.
+	 *
+	 * @author Jasper Siepkes <siepkes@serviceplanet.nl>
+	 */
+	private static final class EmbeddedSoyCompiler extends AbstractSoyCompiler {
+
+		private final Path outputJar;
+
+		private EmbeddedSoyCompiler(Path outputJar) {
+			this.outputJar = outputJar;
+		}
+
+		@Override
+		protected void compile(SoyFileSet.Builder sfsBuilder) throws IOException {
+			try {
+				SoyFileSet sfs = sfsBuilder.build();
+
+				Class<?>[] arguments = new Class[]{
+						ByteSink.class,
+						Optional.class
+				};
+				Method method = SoyFileSet.class.getDeclaredMethod("compileToJar", arguments);
+				method.setAccessible(true);
+				method.invoke(sfs, com.google.common.io.Files.asByteSink(outputJar.toFile()), Optional.empty());
+
+			} catch (Exception e) {
+				throw new RuntimeException("Unable to invoke 'compileToJar' method on 'SoyFileSet' class.", e);
+			}
 		}
 	}
 }
