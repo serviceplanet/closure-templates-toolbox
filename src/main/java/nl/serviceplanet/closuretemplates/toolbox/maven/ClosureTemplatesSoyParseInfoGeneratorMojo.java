@@ -15,9 +15,7 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
-import com.google.template.soy.AbstractSoyCompiler;
 import com.google.template.soy.SoyParseInfoGenerator;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -25,11 +23,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
-import java.io.PrintStream;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 @Mojo(name = "soy-parse-info-generator", defaultPhase = LifecyclePhase.GENERATE_SOURCES)
@@ -47,13 +41,12 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
 		String[] args = generateCliFlags().toArray(new String[0]);
-
-
+		
 		SoyParseInfoGenerator generator = createSoyParseInfoGeneratorInstance();
-		int exitcode = callRunMethod(generator, args, System.err);
+		int exitcode = generator.run(args, System.err);
 
 		if (exitcode != 0) {
-			throw new MojoFailureException("SoyMsgExtractor returned exit-code: " + exitcode);
+			throw new MojoFailureException("SoyParseInfoGenerator returned exit-code: " + exitcode);
 		}
 
 		// N.B.: add the generated java-source as a source-root
@@ -83,21 +76,7 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 			constr.setAccessible(true);
 			return constr.newInstance();
 		} catch (Exception e) {
-			throw new RuntimeException("Unable to create instance of 'SoyMsgExtractor' class.", e);
-		}
-	}
-
-	private int callRunMethod(SoyParseInfoGenerator instance, String[] args, PrintStream stderr) {
-		try {
-			Method method = AbstractSoyCompiler.class.getDeclaredMethod(
-					"run",
-					String[].class,
-					PrintStream.class
-			);
-			method.setAccessible(true);
-			return (Integer) method.invoke(instance, args, stderr);
-		} catch (Exception e) {
-			throw new RuntimeException("Unable to execute 'run' method on 'AbstractSoyCompiler' class.", e);
+			throw new RuntimeException("Unable to create instance of 'SoyParseInfoGenerator' class.", e);
 		}
 	}
 }

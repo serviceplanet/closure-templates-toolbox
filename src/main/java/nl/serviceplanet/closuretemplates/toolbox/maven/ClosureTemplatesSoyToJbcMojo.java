@@ -15,9 +15,7 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
-import com.google.common.io.ByteSink;
-import com.google.template.soy.AbstractSoyCompiler;
-import com.google.template.soy.SoyFileSet;
+import com.google.template.soy.SoyToJbcSrcCompiler;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -27,11 +25,10 @@ import org.apache.maven.project.MavenProject;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.lang.reflect.Method;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -49,6 +46,8 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	 * Soy compiler CLI flag to specify which JAR files to add to the classpath when compiling externs.
 	 */
 	private static final String JAVA_EXTERN_DEFN_JARS_FLAG = "--java_extern_defn_jars";
+	
+	private static final String OUTPUT_FLAG = "--output";
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
@@ -80,10 +79,11 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 
 			try {
 				getLog().debug("Invoking Soy compiler.");
-				EmbeddedSoyCompiler compiler = new EmbeddedSoyCompiler(compiledTemplatesJar);
+				SoyToJbcSrcCompiler compiler = createSoyToJbcSrcCompilerInstance();
+				
 				List<String> compilerCliArgs = generateCliFlags();
-
 				getLog().debug(String.format("About to run Soy compiler with the following CLI arguments: '%s'.", compilerCliArgs));
+				
 				int exitCode = compiler.run(compilerCliArgs.toArray(new String[]{}), System.err);
 				if (exitCode != 0) {
 					throw new MojoExecutionException(String.format("Soy compiler exited with non-zero exit code (%s).", exitCode));
@@ -117,6 +117,9 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	 */
 	private List<String> generateCliFlags() {
 		List<String> compilerCliArgs = generateBaseCliFlags();		
+		
+		compilerCliArgs.add(OUTPUT_FLAG);
+		compilerCliArgs.add(compiledTemplatesJar.toAbsolutePath().toString());
 
 		if (javaExternDefnJars != null && !javaExternDefnJars.isBlank()) {
 			compilerCliArgs.add(JAVA_EXTERN_DEFN_JARS_FLAG);
@@ -169,39 +172,13 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 		}
 	}
 
-	/**
-	 * Allows us to call the Soy compiler from our own Maven code.
-	 *
-	 * It uses a reflection hack to do so. We can't simply call it's main method because it in turn calls a method which
-	 * calls {@code System.exit()}. We also can't only extend {@code AbstractSoyCompiler} because it needs to call
-	 * private methods such as {@code SoyFileSet#compileToJar()}.
-	 *
-	 * @author Jasper Siepkes <siepkes@serviceplanet.nl>
-	 */
-	private static final class EmbeddedSoyCompiler extends AbstractSoyCompiler {
-
-		private final Path outputJar;
-
-		private EmbeddedSoyCompiler(Path outputJar) {
-			this.outputJar = outputJar;
-		}
-
-		@Override
-		protected void compile(SoyFileSet.Builder sfsBuilder) throws IOException {
-			try {
-				SoyFileSet sfs = sfsBuilder.build();
-
-				Class<?>[] arguments = new Class[]{
-						ByteSink.class,
-						Optional.class
-				};
-				Method method = SoyFileSet.class.getDeclaredMethod("compileToJar", arguments);
-				method.setAccessible(true);
-				method.invoke(sfs, com.google.common.io.Files.asByteSink(outputJar.toFile()), Optional.empty());
-
-			} catch (Exception e) {
-				throw new RuntimeException("Unable to invoke 'compileToJar' method on 'SoyFileSet' class.", e);
-			}
+	private SoyToJbcSrcCompiler createSoyToJbcSrcCompilerInstance() {
+		try {
+			Constructor<SoyToJbcSrcCompiler> constr = SoyToJbcSrcCompiler.class.getDeclaredConstructor();
+			constr.setAccessible(true);
+			return constr.newInstance();
+		} catch (Exception e) {
+			throw new RuntimeException("Unable to create instance of 'SoyToJbcSrcCompiler' class.", e);
 		}
 	}
 }

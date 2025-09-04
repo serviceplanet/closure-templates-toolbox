@@ -15,7 +15,6 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
-import com.google.template.soy.AbstractSoyCompiler;
 import com.google.template.soy.SoyMsgExtractor;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -24,9 +23,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
-import java.io.PrintStream;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.List;
 
 @Mojo(name = "soy-to-icu-properties", defaultPhase = LifecyclePhase.VERIFY)
@@ -49,7 +46,7 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosu
 		String[] args = generateCliFlags().toArray(new String[0]);
 
 		SoyMsgExtractor extractor = createSoyMsgExtractorInstance();
-		int exitcode = callRunMethod(extractor, args, System.err);
+		int exitcode = extractor.run(args, System.err);
 
 		if (exitcode != 0) {
 			throw new MojoFailureException("SoyMsgExtractor returned exit-code: " + exitcode);
@@ -78,20 +75,6 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosu
 			return constr.newInstance();
 		} catch (Exception e) {
 			throw new RuntimeException("Unable to create instance of 'SoyMsgExtractor' class.", e);
-		}
-	}
-
-	private int callRunMethod(SoyMsgExtractor instance, String[] args, PrintStream stderr) {
-		try {
-			Method method = AbstractSoyCompiler.class.getDeclaredMethod(
-					"run",
-					String[].class,
-					PrintStream.class
-			);
-			method.setAccessible(true);
-			return (Integer) method.invoke(instance, args, stderr);
-		} catch (Exception e) {
-			throw new RuntimeException("Unable to execute 'run' method on 'AbstractSoyCompiler' class.", e);
 		}
 	}
 }
