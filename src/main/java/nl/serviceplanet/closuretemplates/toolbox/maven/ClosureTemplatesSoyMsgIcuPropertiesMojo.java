@@ -17,7 +17,6 @@ package nl.serviceplanet.closuretemplates.toolbox.maven;
 
 import com.google.template.soy.AbstractSoyCompiler;
 import com.google.template.soy.SoyMsgExtractor;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -28,18 +27,13 @@ import org.apache.maven.project.MavenProject;
 import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 @Mojo(name = "soy-to-icu-properties", defaultPhase = LifecyclePhase.VERIFY)
-public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractMojo {
+public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosureTemplatesCompilerMojo {
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
-
-	@Parameter(property = "soySourcesBasePath")
-	private String soySourcesBasePath;
 
 	@Parameter(property = "outputFile")
 	private String outputFile;
@@ -49,7 +43,6 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractMojo 
 
 	@Parameter(property = "messagePlugin")
 	private String messagePlugin;
-
 
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
@@ -64,10 +57,7 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractMojo 
 	}
 
 	private List<String> generateCliFlags() {
-		List<String> args = new ArrayList<>();
-
-		args.add("--srcs");
-		args.add(SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath)));
+		List<String> args = generateBaseCliFlags();
 
 		args.add("--outputFile");
 		args.add(outputFile);

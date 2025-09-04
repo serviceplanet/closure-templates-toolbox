@@ -116,7 +116,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	 * Generates the "command line" flags and arguments we are going to pass to the Soy compiler.
 	 */
 	private List<String> generateCliFlags() {
-		List<String> compilerCliArgs = generateBaseCliFlags();
+		List<String> compilerCliArgs = generateBaseCliFlags();		
 
 		if (javaExternDefnJars != null && !javaExternDefnJars.isBlank()) {
 			compilerCliArgs.add(JAVA_EXTERN_DEFN_JARS_FLAG);
