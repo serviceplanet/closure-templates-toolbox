@@ -24,9 +24,13 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class SoyFileDiscovery {
+
+	/**
+	 * Returns all Soy files under the specified base path as a string of comma-separated relative paths.
+	 */
 	public static String findSoyFilesAsCSV(Path basePath) {
 		return findSoyFiles(basePath).stream()
-				.map(p -> p.toFile().getAbsolutePath())
+				.map(Path::toString)
 				.collect(Collectors.joining(","));
 	}
 
@@ -35,8 +39,8 @@ public final class SoyFileDiscovery {
 			return stream
 					.filter(path -> path.getFileName().toString().endsWith(".soy"))
 					.collect(ImmutableSet.toImmutableSet());
-		} catch (IOException e) {
-			throw new IllegalStateException("Failed searching for soy-files in: " + basePath, e);
+		} catch (Exception e) {
+			throw new IllegalStateException(String.format("Failed searching for soy-files in: '%s'.", basePath), e);
 		}
 	}
 }

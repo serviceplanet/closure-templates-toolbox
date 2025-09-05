@@ -39,9 +39,9 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 	private String outputDirectory;
 
 	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {
+	public void executeMojo() throws MojoExecutionException, MojoFailureException {
 		String[] args = generateCliFlags().toArray(new String[0]);
-		
+
 		SoyParseInfoGenerator generator = createSoyParseInfoGeneratorInstance();
 		int exitcode = generator.run(args, System.err);
 

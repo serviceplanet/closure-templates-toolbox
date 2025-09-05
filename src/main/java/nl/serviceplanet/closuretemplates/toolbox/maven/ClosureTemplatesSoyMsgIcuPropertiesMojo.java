@@ -42,7 +42,7 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosu
 	private String messagePlugin;
 
 	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {
+	public void executeMojo() throws MojoExecutionException, MojoFailureException {
 		String[] args = generateCliFlags().toArray(new String[0]);
 
 		SoyMsgExtractor extractor = createSoyMsgExtractorInstance();

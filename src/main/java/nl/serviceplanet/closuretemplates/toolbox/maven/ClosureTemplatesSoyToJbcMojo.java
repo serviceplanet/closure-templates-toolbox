@@ -46,7 +46,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	 * Soy compiler CLI flag to specify which JAR files to add to the classpath when compiling externs.
 	 */
 	private static final String JAVA_EXTERN_DEFN_JARS_FLAG = "--java_extern_defn_jars";
-	
+
 	private static final String OUTPUT_FLAG = "--output";
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
@@ -67,7 +67,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	private Path compiledTemplatesJar = null;
 
 	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {
+	public void executeMojo() throws MojoExecutionException, MojoFailureException {
 		try {
 			try {
 				compiledTemplatesJar = Files.createTempFile("soy-bytecode", ".jar");
@@ -80,10 +80,10 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 			try {
 				getLog().debug("Invoking Soy compiler.");
 				SoyToJbcSrcCompiler compiler = createSoyToJbcSrcCompilerInstance();
-				
+
 				List<String> compilerCliArgs = generateCliFlags();
 				getLog().debug(String.format("About to run Soy compiler with the following CLI arguments: '%s'.", compilerCliArgs));
-				
+
 				int exitCode = compiler.run(compilerCliArgs.toArray(new String[]{}), System.err);
 				if (exitCode != 0) {
 					throw new MojoExecutionException(String.format("Soy compiler exited with non-zero exit code (%s).", exitCode));
@@ -116,8 +116,8 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	 * Generates the "command line" flags and arguments we are going to pass to the Soy compiler.
 	 */
 	private List<String> generateCliFlags() {
-		List<String> compilerCliArgs = generateBaseCliFlags();		
-		
+		List<String> compilerCliArgs = generateBaseCliFlags();
+
 		compilerCliArgs.add(OUTPUT_FLAG);
 		compilerCliArgs.add(compiledTemplatesJar.toAbsolutePath().toString());
 

@@ -15,7 +15,10 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
+import jnr.posix.POSIXFactory;
 import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Parameter;
 
 import java.nio.file.Path;
@@ -42,6 +45,20 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	private static final String INDIRECT_DEP_HEADERS_FLAG = "--indirectDepHeaders";
 
 	/**
+	 * For various Soy compilers, such as the Soy header compiler, the working directory from which the compiler is
+	 * invoked is significant. For example in case of the Soy header compiler the full path used in the Soy compiler
+	 * {@code --srcs} flag ends-up in the name of the template in the Protobuf header file. In which case you probably
+	 * want to set the {@code workdir} to something like {@code ${project.basedir}/src/main/resources} in your POM and use
+	 * the {@code --srcs} flag with relative paths.
+	 * <br /><br />
+	 * If you don't explicitly need this (for example the Soy compiler in question does not rely on relative paths) you
+	 * are discouraged from using this. The reason is this uses voodoo at the lower levels which might break in the
+	 * future.
+	 */
+	@Parameter(property = "workdir")
+	protected String workdir;
+
+	/**
 	 * List of Soy (Closure Templates) template files on which to work.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code --srcs} flag.
@@ -50,7 +67,8 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	private String soySources;
 
 	/**
-	 * List of Soy (Closure Templates) template files on which to work.
+	 * Finds all Soy (Closure Templates) files under the specified path and passes them as comma-separated relative
+	 * paths to the Soy compiler.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code --srcs} flag.
 	 */
@@ -77,7 +95,8 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	protected String indirectProtoDeps;
 
 	/**
-	 * The list of dependency Soy header files (if applicable). The compiler needs deps for analysis/checking.
+	 * Comma seperated list of file paths with dependency Soy header files (if applicable). The compiler needs deps for
+	 * analysis/checking.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code depHeaders} flag.
 	 */
@@ -85,8 +104,8 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	protected String depHeaders;
 
 	/**
-	 * Soy file headers required by deps, but which may not be used by srcs. Used by the compiler for typechecking 
-	 * and call analysis.
+	 * Comma seperated list of file paths with dependency Soy header files (if applicable) required by deps, but which
+	 * may not be used by srcs. Used by the compiler for typechecking and call analysis.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code indirectDepHeaders} flag.
 	 */
@@ -131,4 +150,39 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 
 		return baseCliFlags;
 	}
+
+	/**
+	 * You should probably not override this method, override {@link #executeMojo()} instead. This method ensures
+	 * various base settings get configured.
+	 */
+	@Override
+	public void execute() throws MojoExecutionException, MojoFailureException {
+		String originalWorkDir = System.getProperty("user.dir");
+
+		try {
+			if (workdir != null && !workdir.isBlank()) {
+				String workdirStr = null;
+
+				try {
+					workdirStr = Path.of(workdir).toAbsolutePath().toString();
+					getLog().debug(String.format("Using workdir '%s'.", workdirStr));
+					POSIXFactory.getNativePOSIX().chdir(workdirStr);
+				} catch (Exception e) {
+					throw new RuntimeException(String.format("Unable to change work dir to '%s'", workdirStr), e);
+				}
+			}
+
+			executeMojo();
+		} finally {
+			try {
+				if (workdir != null) {
+					POSIXFactory.getNativePOSIX().chdir(originalWorkDir);
+				}
+			} catch (Exception e) {
+				getLog().debug(String.format("Unable to revert workdir to original '%s'.", originalWorkDir), e);
+			}
+		}
+	}
+
+	public abstract void executeMojo() throws MojoExecutionException, MojoFailureException;
 }

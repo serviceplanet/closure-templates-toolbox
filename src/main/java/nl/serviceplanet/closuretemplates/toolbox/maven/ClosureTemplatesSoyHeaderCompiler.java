@@ -10,28 +10,40 @@ import org.apache.maven.project.MavenProject;
 import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 @Mojo(name = "soy-header-compiler", defaultPhase = LifecyclePhase.VERIFY)
 public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemplatesCompilerMojo {
 
 	private static final String OUTPUT_FLAG = "--output";
-	
+
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
 	private MavenProject project;
 
 	@Parameter(property = "outputFile")
 	private String outputFile;
-	
-	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {
-		getLog().debug("Invoking Soy header compiler.");
-		
-		String[] compilerCliArgs = generateCliFlags().toArray(new String[0]);
 
+	@Override
+	public void executeMojo() throws MojoExecutionException, MojoFailureException {
+		getLog().debug("Invoking Soy header compiler.");
+
+		ensureOutputDirectoryExists();
+
+		String[] compilerCliArgs = generateCliFlags().toArray(new String[0]);
 		int exitCode = runSoyHeaderCompilerInstance(compilerCliArgs, System.err);
 		if (exitCode != 0) {
 			throw new MojoFailureException("SoyHeaderCompiler returned exit-code: " + exitCode);
+		}
+	}
+
+	private void ensureOutputDirectoryExists() throws MojoExecutionException {
+		Path outputDirectory = Path.of(outputFile).getParent();
+		try {
+			Files.createDirectories(outputDirectory);
+		} catch (Exception e) {
+			throw new MojoExecutionException(String.format("Unable to create directory '%s' for output file '%s'.", outputDirectory, outputFile), e);
 		}
 	}
 
@@ -40,7 +52,7 @@ public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemp
 	 */
 	private List<String> generateCliFlags() {
 		List<String> compilerCliArgs = generateBaseCliFlags();
-		
+
 		compilerCliArgs.add(OUTPUT_FLAG);
 		compilerCliArgs.add(outputFile);
 
@@ -48,11 +60,11 @@ public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemp
 	}
 
 	/**
-	 * Instantiates and runs the 'run' method of the 'SoyHeaderCompiler' class.  Because the 'SoyHeaderCompiler' class 
-	 * is package-private (which differs from the other compiler classes such as 'SoyToJbcSrcCompiler') we need to use 
+	 * Instantiates and runs the 'run' method of the 'SoyHeaderCompiler' class.  Because the 'SoyHeaderCompiler' class
+	 * is package-private (which differs from the other compiler classes such as 'SoyToJbcSrcCompiler') we need to use
 	 * more reflection voodoo.
 	 */
-	private int runSoyHeaderCompilerInstance(String[] args, PrintStream err) throws MojoExecutionException {		
+	private int runSoyHeaderCompilerInstance(String[] args, PrintStream err) throws MojoExecutionException {
 		try {
 			// Create instance.
 			Class<?> clazz = Class.forName("com.google.template.soy.SoyHeaderCompiler");
