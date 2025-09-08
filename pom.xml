@@ -125,7 +125,7 @@
 			-DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
 			clean source:jar deploy
 			-->
-			<version>eaf077b41a985f554fa07ba3abbe3028305cddfe</version>
+			<version>241598dd092d2f693c0f6f3ec99414462f2ca7c2</version>
 		</dependency>
 
 		<dependency>
