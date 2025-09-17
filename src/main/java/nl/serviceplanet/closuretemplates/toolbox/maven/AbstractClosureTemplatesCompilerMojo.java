@@ -44,6 +44,8 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 
 	private static final String INDIRECT_DEP_HEADERS_FLAG = "--indirectDepHeaders";
 
+	private static final String JAVA_EXTERN_DEFINITIONS_FLAG = "--java_extern_defn_jars";
+
 	/**
 	 * For various Soy compilers, such as the Soy header compiler, the working directory from which the compiler is
 	 * invoked is significant. For example in case of the Soy header compiler the full path used in the Soy compiler
@@ -112,6 +114,14 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	@Parameter(property = "indirectDepHeaders")
 	protected String indirectDepHeaders;
 
+	/**
+	 * Comma separated list of file paths with JAR files containing classes referenced by Soy externs.
+	 * <br /><br />
+	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code java_extern_defn_jars} flag.
+	 */
+	@Parameter(property = "javaExternDefinitionJars")
+	protected String javaExternDefinitionJars;
+
 	protected List<String> generateBaseCliFlags() {
 		List<String> baseCliFlags = new ArrayList<>();
 
@@ -146,6 +156,11 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 		if (indirectDepHeaders != null && !indirectDepHeaders.isBlank()) {
 			baseCliFlags.add(INDIRECT_DEP_HEADERS_FLAG);
 			baseCliFlags.add(indirectDepHeaders);
+		}
+
+		if (javaExternDefinitionJars != null && !javaExternDefinitionJars.isBlank()) {
+			baseCliFlags.add(JAVA_EXTERN_DEFINITIONS_FLAG);
+			baseCliFlags.add(javaExternDefinitionJars);
 		}
 
 		return baseCliFlags;
