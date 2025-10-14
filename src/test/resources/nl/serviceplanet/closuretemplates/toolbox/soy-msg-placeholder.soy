@@ -1,0 +1,66 @@
+{namespace nl.serviceplanet}
+
+{template tmpl}
+    {@param assetVendor: ?}
+    {@param assetObject: ?}
+    {@param otherObject: ?}
+
+    {msg desc="Asset vendor"}
+        Vendor: {$assetVendor}
+    {/msg}
+
+    --
+
+    {msg desc="Asset vendor and model"}
+        {$assetVendor}
+        a/b
+        {$assetObject.model}-{$assetObject.model}
+        c/d
+        {$otherObject.model}={$otherObject.model}
+    {/msg}
+
+    --
+
+    {msg desc="Asset index"}
+        Quantity: {$assetObject.quantity}
+    {/msg}
+
+    --
+
+    {msg desc="Asset model"}
+        Model: {$assetObject.model}
+    {/msg}
+
+    --
+
+    {msg desc="Asset name"}
+        {select $assetObject.name}
+            {default}Name: {$assetObject.name}/{$otherObject.name}
+        {/select}
+    {/msg}
+
+    --
+
+    {msg desc="Asset quantity"}
+        {plural $assetObject.quantity}
+            {case 1}{$assetObject.quantity} asset
+            {default}{$assetObject.quantity} assets
+        {/plural}
+    {/msg}
+
+    --
+
+    {msg desc="Asset quantity and name"}
+        {plural $assetObject.quantity}
+            {case 1}{$assetObject.quantity} asset of {$assetObject.name}
+            {default}Quantity: {$assetObject.quantity} of {$assetObject.name}
+        {/plural}
+    {/msg}
+
+    --
+
+    {msg desc="Asset quantity and name without plural"}
+        Quantity2: {$assetObject.quantity} of {$assetObject.name}
+    {/msg}
+
+{/template}

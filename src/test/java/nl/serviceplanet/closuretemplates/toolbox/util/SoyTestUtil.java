@@ -16,7 +16,6 @@
 package nl.serviceplanet.closuretemplates.toolbox.util;
 
 import com.google.common.io.Resources;
-import com.google.template.soy.SoyFileSet;
 import com.google.template.soy.jbcsrc.api.SoySauce;
 import com.google.template.soy.msgs.SoyMsgBundle;
 import com.google.template.soy.msgs.SoyMsgBundleHandler;
@@ -24,20 +23,30 @@ import nl.serviceplanet.closuretemplates.toolbox.msgbundle.PropertiesIcuGenerato
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.util.SoyUtil;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.util.TextUtil;
 
+import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 
 public final class SoyTestUtil {
+	public static void main(String[] args) throws Exception {
+		dumpIcuPropertiesFile("nl/serviceplanet/closuretemplates/toolbox/multi-variable.soy");
+	}
+
 	/**
 	 * Should be executed (manually) when generating message.properties files for the unit-tests.
 	 */
-	public static void dumpIcuPropertiesFile(String filename) {
+	public static void dumpIcuPropertiesFile(String filename) throws Exception {
 		SoyMsgBundleHandler.OutputFileOptions options = new SoyMsgBundleHandler.OutputFileOptions();
 		options.setSourceLocaleString("en");
 		options.setTargetLocaleString("nl");
 
 		String propertiesFileContent = PropertiesIcuGenerator.extractSoyMsgBundleFromFileSet(
-				compileSoyFile(filename).soyFileSet(), options
+				SoyUtil.compileSoyFile(
+						filename
+				).soyFileSet(), options
 		).propertiesFileContent();
 
 		// intentionally not using logger
@@ -46,30 +55,49 @@ public final class SoyTestUtil {
 		System.out.println("###############################");
 	}
 
-	public static SoyUtil.SoyCompilation compileSoyFile(String filename) {
-		URL url = Resources.getResource(getDirectoryOfUnitTestResources() + "/" + filename);
-		SoyFileSet fileSet = SoyFileSet.builder().add(url).build();
-		return SoyUtil.compileSoyFileSet(fileSet);
+	public static void generateMessagePropertiesFromSoyFileInClasspath(SoyUtil.SoyCompilation soy, String propFile) throws IOException {
+		SoyMsgBundleHandler.OutputFileOptions options = new SoyMsgBundleHandler.OutputFileOptions();
+		options.setSourceLocaleString("en");
+		options.setTargetLocaleString("nl");
+
+		Path path = Path.of(SoyTestUtil.getPathToResource(SoyTestUtil.Source.TARGET_TEST_RESOURCES, propFile));
+		Files.writeString(path, PropertiesIcuGenerator.extractSoyMsgBundleFromFileSet(soy.soyFileSet(), options).propertiesFileContent());
 	}
 
-	public static SoyMsgBundle loadIcuMsgBundle(String filename) {
-		URL url = Resources.getResource(getDirectoryOfUnitTestResources() + "/" + filename);
-		return SoyUtil.loadIcuMsgBundle(url);
+	public enum Source {
+		CLASSPATH, TARGET_TEST_RESOURCES
+	}
+
+	public static String getPathToResource(String filename) {
+		return getPathToResource(Source.CLASSPATH, filename);
+	}
+
+	public static String getPathToResource(Source source, String filename) {
+		String path = getDirectoryOfUnitTestResources() + "/" + filename;
+		if (source == Source.TARGET_TEST_RESOURCES) {
+			path = "target/test-classes/" + path;
+		}
+		return path;
+	}
+
+	public static SoyMsgBundle loadIcuMsgBundle(String filename, String locale) {
+		URL url = Resources.getResource(getPathToResource(filename));
+		return SoyUtil.loadIcuMsgBundle(url, locale, "unit-test", true);
 	}
 
 	public static String render(SoySauce sauce, String templateName, Map<String, ?> data, SoyMsgBundle bundle) {
 		return sauce
 				.renderTemplate(templateName)
 				.setData(data)
-				.setMsgBundle(bundle == null ? SoyMsgBundle.EMPTY : bundle)
+				.setMsgBundle(Optional.ofNullable(bundle).orElse(SoyMsgBundle.EMPTY))
 				.renderHtml()
 				.get()
 				.toSafeHtml()
 				.getSafeHtmlString();
 	}
 
-	private static String getDirectoryOfUnitTestResources() {
-		return getPackageNameOfUnitTestClasses().replace(".","/");
+	public static String getDirectoryOfUnitTestResources() {
+		return getPackageNameOfUnitTestClasses().replace(".", "/");
 	}
 
 	private static String getPackageNameOfUnitTestClasses() {

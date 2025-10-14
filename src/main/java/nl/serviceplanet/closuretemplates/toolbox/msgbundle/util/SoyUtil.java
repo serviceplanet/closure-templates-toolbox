@@ -15,6 +15,7 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.msgbundle.util;
 
+import com.google.common.io.Resources;
 import com.google.template.soy.SoyFileSet;
 import com.google.template.soy.jbcsrc.api.SoySauce;
 import com.google.template.soy.msgs.SoyMsgBundle;
@@ -27,16 +28,37 @@ import nl.serviceplanet.closuretemplates.toolbox.msgbundle.VerboseSoyMsgBundle;
 
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 public final class SoyUtil {
-	public static SoyMsgBundle loadIcuMsgBundle(URL url) {
+	public static final String LOCALE_PREFIX = "# SOY-BUNDLE-LOCALE ";
+
+	public static SoyMsgBundle loadIcuMsgBundle(URL url, String locale, String tag, boolean failOnError) {
 		PropertiesIcuMsgPlugin icuMsgPlugin = new PropertiesIcuMsgPlugin();
+
 		SoyMsgBundleHandler msgBundleHandler = new SoyMsgBundleHandler(icuMsgPlugin);
 		try {
-			return new VerboseSoyMsgBundle("url: " + url, msgBundleHandler.createFromResource(url));
+			SoyMsgBundle bundle;
+			if (locale == null) {
+				bundle = msgBundleHandler.createFromResource(url);
+			} else {
+				// We cannot pass the `locale` to Soy, yet Soy needs it to render plural-blocks. Therefore, we inject
+				// the locale as a comment, in a temporary copy of the properties-file. This will be picked up during parsing.
+				String propertiesFileContents = Resources.asCharSource(url, StandardCharsets.UTF_8).read();
+				Path temp = Files.createTempFile("soy-msg-bundle", "properties");
+				try {
+					Files.writeString(temp, LOCALE_PREFIX + locale + "\n" + propertiesFileContents);
+					bundle = msgBundleHandler.createFromFile(temp.toFile());
+				} finally {
+					Files.deleteIfExists(temp);
+				}
+			}
+			return new VerboseSoyMsgBundle(bundle, tag, String.valueOf(url), failOnError);
 		} catch (IOException exc) {
 			throw new RuntimeException(exc);
 		}
@@ -85,5 +107,17 @@ public final class SoyUtil {
 				)
 				.orElseThrow(() -> new IllegalStateException("failed to find root TemplateNode"))
 				.templateNode();
+	}
+
+	public static SoyCompilation compileSoyFile(String filename) throws Exception {
+		return compileSoyFile(Resources.getResource(filename), filename);
+	}
+
+	public static SoyCompilation compileSoyFile(URL url, String filename) throws Exception {
+		String soyText = Resources.toString(url, StandardCharsets.UTF_8);
+
+		return compileSoyFileSet(SoyFileSet.builder()
+				.add(soyText, url.toString())
+				.build());
 	}
 }

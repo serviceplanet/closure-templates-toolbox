@@ -1,0 +1,14 @@
+{namespace nl.serviceplanet}
+
+{template tmpl}
+    {@param someNumber: ?}
+
+    {msg desc="someNumber"}
+        {plural $someNumber}
+            {case 0}geen
+            {case 1}one item
+            {default}{$someNumber} items
+        {/plural}
+    {/msg}
+
+{/template}

@@ -1,0 +1,19 @@
+[tolgee]
+api.url = "http://127.0.0.1:8181"
+
+[general]
+missing_namespace_fail = false
+
+[[projects]]
+tolgee.id = 1
+# tolgee.namespace = "whatever"
+
+[[projects.sources]]
+files = "soy-msg-placeholder.properties"
+type = "PROPERTIES_ICU"
+locale = "nl-NL"
+
+[[projects.targets]]
+files = "soy-msg-placeholder_${locale separator=underscore, region_case=upper}.properties"
+type = "PROPERTIES"
+excluded_locales = ["nl-NL"]

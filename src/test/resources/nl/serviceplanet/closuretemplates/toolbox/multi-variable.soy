@@ -1,0 +1,49 @@
+{namespace nl.serviceplanet}
+
+{template tmpl1}
+    {@param varOne: string }
+
+    {msg desc="Show a limited number of one variable"}
+        VarOne={$varOne}, VarOneAgain={$varOne}
+    {/msg}
+{/template}
+
+{template tmpl2}
+    {@param varOne: string }
+    {@param varTwo: string }
+
+    {msg desc="Show a whopping number of two variables"}
+        VarOne={$varOne}, VarTwo={$varTwo}, VarOneAgain={$varOne}
+    {/msg}
+{/template}
+
+{template tmpl3}
+    {@param objOne: ? }
+    {@param objTwo: ? }
+
+    {msg desc="Show two referenced variables"}
+        ObjOne={$objOne.id}, ObjTwo={$objTwo.id}, ObjOneAgain={$objOne.id}
+    {/msg}
+{/template}
+
+{template tmpl4}
+    {@param objOne: ? }
+    {@param objTwo: ? }
+
+    {msg desc="Show two referenced variables reordered"}
+        ObjTwo={$objTwo.id}, ObjOne={$objOne.id}, ObjTwoAgain={$objTwo.id}
+    {/msg}
+{/template}
+
+{template tmpl5}
+    {@param objOne: ? }
+    {@param varOne: string }
+    {@param varTwo: string }
+    {@param objTwo: ? }
+
+    {msg desc="Show two referenced variables and two regular variables"}
+        ObjTwo={$objTwo.id}, ObjOne={$objOne.id}, ObjTwoAgain={$objTwo.id},
+        VarOne={$varOne}, VarTwo={$varTwo}, VarOneAgain={$varOne}
+    {/msg}
+{/template}
+

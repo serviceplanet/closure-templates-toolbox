@@ -21,13 +21,10 @@ import nl.serviceplanet.closuretemplates.toolbox.util.SoyTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public final class PersonGenderTest {
-	private static final Logger log = LoggerFactory.getLogger(PersonGenderTest.class);
 	private static final String SOY_FILE = "person-gender.soy";
 	private static final String ICU_NL_PROP_FILE = "person-gender-NL.properties";
 
@@ -35,9 +32,9 @@ public final class PersonGenderTest {
 	private static SoyMsgBundle bundleNL;
 
 	@BeforeAll
-	public static void setup() {
-		soy = SoyTestUtil.compileSoyFile(SOY_FILE);
-		bundleNL = SoyTestUtil.loadIcuMsgBundle(ICU_NL_PROP_FILE);
+	public static void setup() throws Exception {
+		soy = SoyUtil.compileSoyFile(SoyTestUtil.getPathToResource(SOY_FILE));
+		bundleNL = SoyTestUtil.loadIcuMsgBundle(ICU_NL_PROP_FILE, "nl_NL");
 	}
 
 	@Test

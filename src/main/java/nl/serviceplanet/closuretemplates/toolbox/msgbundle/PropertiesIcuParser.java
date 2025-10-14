@@ -27,45 +27,61 @@ import com.google.template.soy.msgs.restricted.SoyMsgPluralPart;
 import com.google.template.soy.msgs.restricted.SoyMsgRawTextPart;
 import com.google.template.soy.msgs.restricted.SoyMsgSelectPart;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.icu.MessageFormatTokenType;
+import nl.serviceplanet.closuretemplates.toolbox.msgbundle.util.SoyUtil;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.util.TextUtil;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.icu.MessageFormatLexer;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.icu.MessageFormatToken;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
 public final class PropertiesIcuParser {
-	//	private static final Logger log = LoggerFactory.getLogger(PropertiesIcuParser.class);
-
 	private PropertiesIcuParser() {
 		// Not intended to be instantiated.
 	}
 
-	static SoyMsgBundle parseIcuMsgsPropertiesFile(String propertyIcuMsgs) {
+	public static SoyMsgBundle parseIcuMsgsPropertiesFile(String propertyIcuMsgs) {
 		List<SoyMsg> messages = new ArrayList<>();
 
+		String localeString = null;
 		try (Scanner scanner = new Scanner(propertyIcuMsgs)) {
 			while (scanner.hasNext()) {
-				SoyMsg msg = parseIcuMsgPropertyLine(scanner.nextLine());
+				String line = scanner.nextLine();
+				if (line.startsWith(SoyUtil.LOCALE_PREFIX)) {
+					localeString = TextUtil.after(line, SoyUtil.LOCALE_PREFIX).trim();
+					continue;
+				}
+
+				SoyMsg msg;
+				try {
+					msg = parseIcuMsgPropertyLine(line, localeString);
+				} catch (Exception exc) {
+					throw new IllegalArgumentException("invalid icu-definition on line: '" + line + "'", exc);
+				}
+
 				if (msg != null) {
 					messages.add(msg);
 				}
 			}
 		}
 
-		return new SoyMsgBundleImpl(null, messages);
+		return new SoyMsgBundleImpl(localeString, messages);
 	}
 
-	private static SoyMsg parseIcuMsgPropertyLine(String line) {
+	private static SoyMsg parseIcuMsgPropertyLine(String line, String localeString) {
 		line = line.stripLeading();
 		if (line.startsWith("#")) {
 			return null;
 		}
 
-		List<String> keyValPair = TextUtil.splitWithoutRegex(line, "=", 2);
+		List<String> keyValPair = TextUtil.splitWithoutRegex(line, "=", 2).stream().map(String::trim).toList();
 		if (keyValPair.size() < 2) {
 			return null;
 		}
@@ -83,24 +99,34 @@ public final class PropertiesIcuParser {
 		ImmutableList<MessageFormatToken> icuMessageTokens = new MessageFormatLexer(val).tokenize();
 		ImmutableList<SoyMsgPart> soyMsgParts = convertToSoyMsgParts(icuMessageTokens);
 
-		if (soyMsgParts.size() > 1) {
-			throw new IllegalStateException("Soy {msg}-element can have only 1 root-child, found " + soyMsgParts.size() + " for icu-definition: '" + line + "'");
+		if (soyMsgParts.stream().anyMatch(p -> p instanceof SoyMsgPluralPart || p instanceof SoyMsgSelectPart)) {
+			if (soyMsgParts.size() > 1) {
+				throw new IllegalStateException("Soy {msg}-element with plural-block or select-block can have only 1 root-child, found " + soyMsgParts.size());
+			}
 		}
 
-		return SoyMsg.builder()
+		SoyMsg.Builder builder = SoyMsg.builder()
 				.setId(msgId)
-				.setParts(soyMsgParts)
-				.build();
+				.setParts(soyMsgParts);
+		if (localeString != null) {
+			builder.setLocaleString(localeString);
+		} else if (soyMsgParts.stream().anyMatch(p -> p instanceof SoyMsgPluralPart)) {
+			throw new IllegalStateException(String.format("Soy {msg}-element with plural-block requires a defined locale in the properties-file. " +
+					"Specify the locale at the top of the properties-file, like: '%sen-US', or use %s", SoyUtil.LOCALE_PREFIX, SoyUtil.class.getName() + ".loadIcuMsgBundle(url, locale, tag)"));
+		}
+		return builder.build();
 	}
 
 	private static ImmutableList<SoyMsgPart> convertToSoyMsgParts(List<MessageFormatToken> icuMessageTokens) {
 		ImmutableList.Builder<SoyMsgPart> soyMsgParts = ImmutableList.builderWithExpectedSize(icuMessageTokens.size());
 
+		Map<String, Integer> icuRef2usageCount = new HashMap<>();
+
 		for (MessageFormatToken icuMessageToken : icuMessageTokens) {
 			SoyMsgPart soyMsgPart = switch (icuMessageToken.type()) {
 				case TEXT -> SoyMsgRawTextPart.of(icuMessageToken.value());
 				case PLACEHOLDER -> new SoyMsgPlaceholderPart(convertIcuRefToSoyPlaceholderName(
-						icuMessageToken.value(), icuMessageToken.type())
+						icuMessageToken.value(), icuMessageToken.type(), icuRef2usageCount)
 				);
 				case SELECT, PLURAL -> createSoyMsgSwitchBlock(icuMessageToken);
 				case EOF -> null;
@@ -126,25 +152,25 @@ public final class PropertiesIcuParser {
 		// notice that, after 'select/plural', we have a sequence of pairs of [text, placeholder]
 
 		String switchBlockDef = TextUtil.extractWrappedText(messageFormatToken.value(), "{", "}");
-		List<String> parts = TextUtil.splitWithoutRegex(switchBlockDef, ",", 3);
+		List<String> parts = TextUtil.splitWithoutRegex(switchBlockDef, ",", 3).stream().map(String::trim).toList();
 		checkArgument(parts.size() == 3, messageFormatToken.type() + " switch-block must have format {ref,switch-type,switch-cases-expr}");
 
-		String ref = parts.get(0).trim();
-		String type = parts.get(1).trim();
-		String expr = parts.get(2).trim();
+		String ref = parts.get(0);
+		String type = parts.get(1);
+		String expr = parts.get(2);
 
 		if (MessageFormatTokenType.valueOf(type.toUpperCase()) != messageFormatToken.type()) {
 			throw new AssertionError();
 		}
 
-		String placeHolderName = convertIcuRefToSoyPlaceholderName(ref, messageFormatToken.type());
+		String switchBlockVarName = convertIcuRefToSoyPlaceholderName(ref, messageFormatToken.type(), new HashMap<>());
 		List<SwitchCase<?>> icuSwitchCases = parseIcuSwitchCases(expr, type);
-		List<SwitchCase<List<SoyMsgPart>>> soySwitchCase = convertIcuSwitchCasesToSoy(icuSwitchCases, placeHolderName);
+		List<SwitchCase<List<SoyMsgPart>>> soySwitchCase = convertIcuSwitchCasesToSoy(icuSwitchCases, switchBlockVarName);
 
 		// convert switch-cases to one SoyMsgPart
 		return switch (type.toLowerCase()) {
 			case "select" -> new SoyMsgSelectPart(
-					placeHolderName,
+					switchBlockVarName,
 					soySwitchCase
 							.stream()
 							.map(switchCase -> SoyMsgPart.Case.create(
@@ -154,7 +180,7 @@ public final class PropertiesIcuParser {
 							)
 							.toList());
 			case "plural" -> new SoyMsgPluralPart(
-					placeHolderName,
+					switchBlockVarName,
 					0,
 					soySwitchCase
 							.stream()
@@ -206,11 +232,11 @@ public final class PropertiesIcuParser {
 
 	@SuppressWarnings("unchecked")
 	private static List<SwitchCase<List<SoyMsgPart>>> convertIcuSwitchCasesToSoy(
-			List<SwitchCase<?>> icuSwitchCases, String placeHolderName) {
+			List<SwitchCase<?>> icuSwitchCases, String switchBlockVarName) {
 		return icuSwitchCases.stream()
 				.map(switchCase -> new SwitchCase<>(switchCase.caseSelector(),
 						(switchCase.caseYieldExpr() instanceof String caseYieldString)
-								? convertIcuExpressionToSoyMsgParts(TextUtil.extractWrappedText(caseYieldString, "{", "}"), placeHolderName)
+								? convertIcuExpressionToSoyMsgParts(TextUtil.extractWrappedText(caseYieldString, "{", "}"), switchBlockVarName)
 								: (List<SoyMsgPart>) switchCase.caseYieldExpr()
 				))
 				.toList();
@@ -233,27 +259,64 @@ public final class PropertiesIcuParser {
 		return caseSelector;
 	}
 
-	private static List<SoyMsgPart> convertIcuExpressionToSoyMsgParts(String text, String placeHolderName) {
-		// "You have # products." -> ["You have ", placeHolderName, "products."]
+	private static List<SoyMsgPart> convertIcuExpressionToSoyMsgParts(String text, String switchBlockVarName) {
+		// "You have # products." -> [text("You have "), placeholder(switchBlock.variableName), text("products.")]
+		// "You have {count} products." -> [text("You have "), placeholder('count'), text("products.")]
 		List<SoyMsgPart> parts = new ArrayList<>();
-		for (String segment : TextUtil.splitWithoutRegex(text, "#")) {
-			if (!parts.isEmpty()) {
-				parts.add(new SoyMsgPlaceholderPart(placeHolderName));
+
+		Matcher m = Pattern.compile("#|\\{\\$?([0-9a-zA-Z_]+)}").matcher(text);
+
+		int hashCount = 0;
+
+		int prevEnd = 0;
+		while (m.find()) {
+			String before = text.substring(prevEnd, m.start());
+			if (!before.isEmpty()) {
+				parts.add(SoyMsgRawTextPart.of(before));
 			}
-			parts.add(SoyMsgRawTextPart.of(segment));
+			String got = m.group();
+			if (got.equals("#")) { // resolve to parent-block variable
+				parts.add(new SoyMsgPlaceholderPart(switchBlockVarName));
+				hashCount++;
+			} else { // resolve by name
+				parts.add(new SoyMsgPlaceholderPart(m.group(1)));
+			}
+			prevEnd = m.end();
 		}
+		if (prevEnd < text.length()) {
+			parts.add(SoyMsgRawTextPart.of(text.substring(prevEnd)));
+		}
+
+		if (hashCount > 1) {
+			throw new IllegalStateException("multiple hash-placeholders found in switch-case expression: '" + text + "'");
+		}
+
 		return parts;
 	}
 
-	private static String convertIcuRefToSoyPlaceholderName(String icuRef, MessageFormatTokenType type) {
+	private static String convertIcuRefToSoyPlaceholderName(String icuRef, MessageFormatTokenType type, Map<String, Integer> ref2usageCount) {
 		// Soy turns variable 'productCount' into PlaceholderName 'PRODUCT_COUNT_1'.
 		// This has nothing to do with ICU, this seems to be how Soy internally
 		// handles placeholders, and the i18n MsgBundle has to align with this.
 		//
-		// Note that IcuSyntaxUtils.convertMsgPartsToEmbeddedIcuSyntax(...)
-		// does NOT do the opposite, so it's truly unrelated to ICU.
+		// One of the reasons is the fact that ICU does not support dereferencing
+		// within a variable declaration, while Soy does. ICU only supports
+		// variable-names. This forces Soy to ensure variable-names are unique.
+		// It uses its own non-trivial logic for this, which we try to align with.
 		//
-		// TODO: figure out what determines the (lack of) _N suffix at runtime in Soy.
+		// Example: (see ./target/[...]/multi-variable-NL.properties)
+		//    in Soy: "{$ABC.item}, {$XYZ.item}", {$ABC.item}"
+		//    in ICU: "{$ITEM_1}, {$ITEM_2}, {$ITEM_1}"
+		//
+		// Note that IcuSyntaxUtils.convertMsgPartsToEmbeddedIcuSyntax(...)
+		// does NOT do the opposite.
+
+		if (icuRef.startsWith("{")) {
+			icuRef = TextUtil.extractWrappedText(icuRef, "{", "}");
+			if (icuRef.startsWith("$")) {
+				icuRef = icuRef.substring(1);
+			}
+		}
 
 		if (!TextUtil.isVariableName(icuRef)) {
 			throw new IllegalStateException("icu-ref does not seem to be an expected variable-name: '" + icuRef + "'");
@@ -263,9 +326,14 @@ public final class PropertiesIcuParser {
 			return icuRef; // assume the var-name is already correctly generated
 		}
 
+		// map soy-name to placeholder-name, with optional (dummy) positional argument.
 		String snakeCase = TextUtil.camelCaseToUpperSnakeCase(icuRef);
 		if (type == MessageFormatTokenType.PLURAL) {
-			snakeCase += "_1";
+			// There is no (trivial) way to determine the positional
+			// argument, but a usage-count works in typical cases.
+			int usageCount = ref2usageCount.compute(icuRef, (k, v) -> ((v == null) ? 0 : v) + 1);
+
+			snakeCase += "_" + usageCount;
 		}
 		return snakeCase;
 	}

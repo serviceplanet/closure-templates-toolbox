@@ -29,18 +29,23 @@ import com.google.template.soy.msgs.restricted.SoyMsgPlaceholderPart;
 import com.google.template.soy.msgs.restricted.SoyMsgPluralPart;
 import com.google.template.soy.msgs.restricted.SoyMsgRawTextPart;
 import com.google.template.soy.msgs.restricted.SoyMsgSelectPart;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class PropertiesIcuGenerator {
 
 	private static final char LINE_BREAK = '\n';
+	private static final Logger log = LoggerFactory.getLogger(PropertiesIcuGenerator.class);
 
 	private PropertiesIcuGenerator() {
 		// Not intended to be instantiated.
@@ -87,27 +92,80 @@ public final class PropertiesIcuGenerator {
 	}
 
 	private static String convertSoyMsgToPropertyValue(SoyMsg soyMsg) {
-		StringBuilder val = new StringBuilder();
+		// In principle there is no difference between these plural-blocks:
+		//  - {SOME_NUMBER,plural,=1{# product}other{# products}
+		//  - {SOME_NUMBER,plural,=1{{SOME_NUMBER} product}other{{SOME_NUMBER} products}
+		//
+		// Both are imported into Tolgee correctly. However, when machine-translation is executed, Tolgee
+		// will generate multiple numerical values for '#' and translate each variant. This plays a role
+		// in selecting the proper plural-case (zero, one, few, many, other) for specific numeric values
+		// in locales where the exact number matters -- such as: a number ending with a '3', [like 3, 63, 83]
+		// changes the grammar of the next noun. Tolgee only performs this 'numeric expansion' for an expression
+		// containing the '#', such as '# products', and not for '{SOME_NUMBER} products'.
+		//
+		// This forces us to use the '#' wherever possible. This means that within a plural-block, we can substitute
+		// a placeholder like '{SOME_NUMBER}' with a '#', if [and only if] the plural-block switches on '{SOME_NUMBER}'.
+		//
+		// Observed that the switch-block typically uses '{SOME_NUMBER_[n]}' and the case-expr is '{SOME_NUMBER_[n+1]}',
+		// we do not patch on '{SOME_NUMBER[n+2]}' because that can refer to a completely different field, with the same
+		// name, like '{$aaa.name} / {$bbb.name}' will be compiled to, say, '{NAME_2} / {NAME_3}', where Soy maps
+		// the positional arguments '2' and '3' back to objects 'aaa' and 'bbb' internally.
+		//
+		//
+		// Example of eagerly converting variables to hashes:
+		//    Input ICU: {QUANTITY_1,plural,=1{{QUANTITY_2} asset of {NAME}}other{{QUANTITY_2} assets of {NAME}}}
+		//   Output ICU: {QUANTITY_1,plural,=1{# asset of {NAME}}other{# assets of {NAME}}}
+		//
+		// Note that '{QUANTITY_2}' is converted to '#', because it matches the '{QUANTITY_1}' plural-variable,
+		//            while '{NAME}' is not converted, because '{NAME}' is not a plural-variable.
+		//
+		// When parsing the translated ICU (by Tolgee) we convert the '#' back to '{QUANTITY_2}' such that Soy
+		// knows which variable to render.
 
-		// Converts all plural, plural remainder and select parts to ICU syntax in Soy raw text.
+		Set<SoyVar> pluralVars = extractPluralVariables(soyMsg);
+
+		// Converts all plural, plural remainder and select parts to ICU syntax in Soy raw text. This method converts and
+		// flattens a DOM-tree into a list of ICU-segments, that contain partial snippets of the DOM in 'raw text' form.
 		ImmutableList<SoyMsgPart> soyMsgParts = IcuSyntaxUtils.convertMsgPartsToEmbeddedIcuSyntax(soyMsg.getParts());
 
+
+		StringBuilder val = new StringBuilder();
 		for (SoyMsgPart soyMsgPart : soyMsgParts) {
-			if (soyMsgPart instanceof SoyMsgRawTextPart) {
-				val.append(((SoyMsgRawTextPart) soyMsgPart).getRawText());
-			} else if (soyMsgPart instanceof SoyMsgPlaceholderPart) {
-				val.append("#");
-			} else if (soyMsgPart instanceof SoyMsgPluralPart ||
-					soyMsgPart.getClass().getName().endsWith("PluralRemainderPart") ||
-					soyMsgPart instanceof SoyMsgSelectPart) {
-				throw new IllegalStateException("Encountered a plural, plural remainder or select part. " +
-						"These should already have been converted to ICU.");
+			if (soyMsgPart instanceof SoyMsgRawTextPart rawTxt) {
+				val.append(rawTxt.getRawText());
+			} else if (soyMsgPart instanceof SoyMsgPlaceholderPart var) {
+				if (isVarUsageOfSwitchVar(pluralVars, var)) {
+					// TODO: This does not take into account the DOM-hierarchy, because the hierarchy is flattened. This
+					// will inevitably lead to incorrect variables in complex msg-definitions. The alternative is to
+					// ditch `convertMsgPartsToEmbeddedIcuSyntax` and work on the DOM directly - which is a big effort.
+					// I couldn't yet find a way to trigger an incorrect use of '#', but if anything breaks, look here.
+					val.append("#");
+				} else {
+					val.append("{").append(var.getPlaceholderName()).append("}");
+				}
 			} else {
 				throw new RuntimeException(String.format("Encountered unknown Soy message part: '%s'.", soyMsgPart));
 			}
 		}
-
 		return val.toString();
+	}
+
+	private static Set<SoyVar> extractPluralVariables(SoyMsg soyMsg) {
+		Set<SoyVar> pluralVars = new HashSet<>();
+		soyMsg.getParts().forEach(p -> extractPluralVariables(p, pluralVars));
+		return pluralVars;
+	}
+
+	private static void extractPluralVariables(SoyMsgPart soyMsgPart, Set<SoyVar> outputSet) {
+		// recursively find plural-blocks
+
+		if (soyMsgPart instanceof SoyMsgPluralPart pp) {
+			outputSet.add(parseSoyVar(pp.getPluralVarName()));
+
+			pp.getCases().forEach(p -> p.parts().forEach(x -> extractPluralVariables(x, outputSet)));
+		} else if (soyMsgPart instanceof SoyMsgSelectPart pp) {
+			pp.getCases().forEach(p -> p.parts().forEach(x -> extractPluralVariables(x, outputSet)));
+		}
 	}
 
 	public record SoyMsgBundleDefinition(String propertiesFileContent, SoyMsgBundle msgBundle) {
@@ -170,5 +228,36 @@ public final class PropertiesIcuGenerator {
 		);
 		method.setAccessible(true);
 		return method;
+	}
+
+	private record SoyVar(String name, int pos) {
+	}
+
+	private static SoyVar parseSoyVar(String icuRef) {
+		Matcher m = Pattern.compile("^([0-9a-zA-Z_]+?)(_([0-9]+))?$").matcher(icuRef);
+		if (!m.find()) {
+			throw new IllegalStateException("malformed icu-ref: '" + icuRef + "'");
+		}
+		if (m.group(3) != null) {
+			return new SoyVar(m.group(1), Integer.parseInt(m.group(3)));
+		}
+		return new SoyVar(m.group(1), -1);
+	}
+
+	private static boolean isVarUsageOfSwitchVar(Set<SoyVar> pluralVars, SoyMsgPlaceholderPart var) {
+		SoyVar placeholderVar = parseSoyVar(var.getPlaceholderName());
+		return pluralVars.stream().anyMatch(pluralVar -> isVarUsageOfSwitchVar(pluralVar, placeholderVar));
+	}
+
+	private static boolean isVarUsageOfSwitchVar(SoyVar switchVar, SoyVar caseExprVar) {
+		if (!switchVar.name.equals(caseExprVar.name)) {
+			return false;
+		}
+
+		// 1. Match '{NAME}' and '{NAME}'
+		// 2. Match '{NAME_3}' and '{NAME_3}'
+		// 3. Match '{NAME_3}' and '{NAME_4}' (N+1)
+		// 4. Match '{NAME}' and '{NAME_0}' (N+1, because position-less == -1)
+		return (switchVar.pos == caseExprVar.pos) || (switchVar.pos == caseExprVar.pos - 1);
 	}
 }

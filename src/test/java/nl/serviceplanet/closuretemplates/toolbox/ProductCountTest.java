@@ -35,9 +35,9 @@ public final class ProductCountTest {
 	private static SoyMsgBundle bundleNL;
 
 	@BeforeAll
-	public static void setup() {
-		soy = SoyTestUtil.compileSoyFile(SOY_FILE);
-		bundleNL = SoyTestUtil.loadIcuMsgBundle(ICU_NL_PROP_FILE);
+	public static void setup() throws Exception {
+		soy = SoyUtil.compileSoyFile(SoyTestUtil.getPathToResource(SOY_FILE));
+		bundleNL = SoyTestUtil.loadIcuMsgBundle(ICU_NL_PROP_FILE, "nl_NL");
 	}
 
 	@Test

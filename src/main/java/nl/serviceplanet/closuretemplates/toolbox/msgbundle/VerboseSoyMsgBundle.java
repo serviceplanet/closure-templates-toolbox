@@ -20,6 +20,7 @@ import com.google.template.soy.msgs.restricted.SoyMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -30,16 +31,32 @@ public class VerboseSoyMsgBundle extends SoyMsgBundle {
 	private final Logger log = LoggerFactory.getLogger(VerboseSoyMsgBundle.class);
 
 	private final String tag;
+	private final String origin;
 	private final SoyMsgBundle wrapped;
+	private final boolean failOnError;
 	private final Set<Long> failedMsgLookups;
 
-	public VerboseSoyMsgBundle(String tag, SoyMsgBundle wrapped) {
+	public VerboseSoyMsgBundle(SoyMsgBundle wrapped, String tag, @Nullable String origin, boolean failOnError) {
 		checkNotNull(tag, "tag");
 		checkNotNull(wrapped, "wrapped");
 
 		this.tag = tag;
+		this.origin = origin;
 		this.wrapped = wrapped;
+		this.failOnError = failOnError;
 		this.failedMsgLookups = new HashSet<>();
+	}
+
+	public String getTag() {
+		return tag;
+	}
+
+	public String getOrigin() {
+		return origin;
+	}
+
+	public boolean isFailOnError() {
+		return failOnError;
 	}
 
 	public Set<Long> getFailedMsgLookups() {
@@ -64,8 +81,15 @@ public class VerboseSoyMsgBundle extends SoyMsgBundle {
 
 		SoyMsg got = wrapped.getMsg(id);
 		if (got == null) {
-			log.info("SoyMsgBundle[{}]::getMsg({}) lookup failed", tag, id);
-			failedMsgLookups.add(id);
+			String msg = String.format("SoyMsgBundle[%s]::getMsg('%s') lookup failed", tag, id);
+
+			boolean isFirstTime = failedMsgLookups.add(id);
+
+			if (failOnError) {
+				throw new IllegalStateException(msg);
+			} else if (isFirstTime) {
+				log.info(msg);
+			}
 		}
 		return got;
 	}
@@ -78,5 +102,9 @@ public class VerboseSoyMsgBundle extends SoyMsgBundle {
 	@Override
 	public Iterator<SoyMsg> iterator() {
 		return wrapped.iterator();
+	}
+
+	public String toString() {
+		return this.getClass().getName() + "[locale=" + wrapped.getLocaleString() + ", failOnError: " + failOnError + ", tag: " + tag + ", origin: " + origin + "]";
 	}
 }

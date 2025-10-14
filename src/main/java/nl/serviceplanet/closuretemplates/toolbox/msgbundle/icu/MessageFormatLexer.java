@@ -50,7 +50,7 @@ public final class MessageFormatLexer {
 				// {...,plural,.............}
 
 				String expr = extractExpression();
-				String keyword = TextUtil.between(expr, ",", ",", "unknown");
+				String keyword = TextUtil.between(expr, ",", ",", "unknown").trim();
 
 				MessageFormatTokenType type = switch (keyword) {
 					case "select" -> MessageFormatTokenType.SELECT;

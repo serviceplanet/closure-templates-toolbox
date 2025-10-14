@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -35,9 +36,18 @@ public final class SoyFileDiscovery {
 	}
 
 	public static ImmutableSet<Path> findSoyFiles(Path basePath) {
+		if (!Files.exists(basePath)) {
+			throw new IllegalArgumentException("base-path not found: " + basePath + ", absolute-path: " + basePath.toAbsolutePath());
+		}
+
+		if (Files.isRegularFile(basePath)) {
+			return ImmutableSet.of(basePath);
+		}
+
 		try (Stream<Path> stream = Files.walk(basePath, 200)) {
 			return stream
 					.filter(path -> path.getFileName().toString().endsWith(".soy"))
+					.sorted(Comparator.comparing(x -> x.toString().contains("/target/")).reversed().thenComparing(Object::toString))
 					.collect(ImmutableSet.toImmutableSet());
 		} catch (Exception e) {
 			throw new IllegalStateException(String.format("Failed searching for soy-files in: '%s'.", basePath), e);
