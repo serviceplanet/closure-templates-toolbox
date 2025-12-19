@@ -115,17 +115,18 @@
 			<groupId>com.google.template</groupId>
 			<artifactId>soy</artifactId>
 			<!--
-			We needed a version higher than 2024-02-24 which wasn't available. jitpack.io chocked on Closure Templates
-			so we couldn't use that. So this is a version build from a specific commit.
+            We needed a version higher than 2024-02-24 which wasn't available. jitpack.io chocked on Closure Templates
+            so we couldn't use that. So this is a version build from a specific commit.
 
-			Either build locally with `mvn clean install` or deploy to repo with:
-
-			mvn \
-			-DskipNexusStagingDeployMojo=true \
-			-DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
-			clean source:jar deploy
-			-->
-			<version>1c966d7d82d6f92b09ebd906083fd9c9d3c28a2c</version>
+            * Modify the version to the GIT commit hash.
+            * Build and deploy with (source requires atleast Java 17, but property is configured to 11):
+                mvn \
+                -Djava.version=17 \
+                -DskipNexusStagingDeployMojo=true \
+                -DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
+                clean source:jar deploy
+            -->
+			<version>b4889c83cf4354f71334e2abb4e0e3a481859da1</version>
 		</dependency>
 
 		<dependency>
