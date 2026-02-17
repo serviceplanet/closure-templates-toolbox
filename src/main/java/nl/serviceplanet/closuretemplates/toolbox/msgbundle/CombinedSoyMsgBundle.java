@@ -30,7 +30,8 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class CombinedSoyMsgBundle extends SoyMsgBundle {
+public final class CombinedSoyMsgBundle extends SoyMsgBundle {
+	
 	private static final Logger log = LoggerFactory.getLogger(CombinedSoyMsgBundle.class);
 	private final String localeString;
 	private final Map<Long, SoyMsg> id2msg;
@@ -50,7 +51,7 @@ public class CombinedSoyMsgBundle extends SoyMsgBundle {
 		id2msg = new HashMap<>();
 		bundles.forEach(bundle -> bundle.forEach(msg -> {
 			if (id2msg.put(msg.getId(), msg) != null) {
-				log.info("Found msg.id {} in multiple bundles", msg.getId());
+				log.debug("Found msg.id '{}' in multiple bundles.", msg.getId());
 			}
 		}));
 	}
