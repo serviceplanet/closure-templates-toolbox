@@ -14,9 +14,12 @@ pipeline {
     }
 
     environment {
+        PROJECT_NAME = 'closure-templates-toolbox'
+
         MAVEN_OPTS = '-Dstyle.color=always -Djansi.force=true -Xms512m -Xmx1024m'
-        POM_FILE = 'pom.xml'
-        POM_VERSION = readMavenPom(file: 'pom.xml').getVersion()
+        MAVEN_POM_FILE = 'pom.xml'
+        MAVEN_POM_VERSION = readMavenPom(file: 'pom.xml').getVersion()
+
         GIT_COMMITTER_NAME = "jenkins"
         GIT_COMMITTER_EMAIL = "jenkins@serviceplanet.nl"
     }
@@ -34,7 +37,7 @@ pipeline {
                     echo "M2_HOME = ${M2_HOME}"
                     echo "JAVA_HOME = ${JAVA_HOME}"
                     echo "GIT_BRANCH = ${GIT_BRANCH}"
-                    echo "POM_VERSION = ${POM_VERSION}"
+                    echo "MAVEN_POM_VERSION = ${MAVEN_POM_VERSION}"
                 '''
             }
         }
@@ -68,7 +71,7 @@ pipeline {
                         //
                         // The maven goal 'install' is needed to install the pom in the local .m2 directory, so that it can
                         // be found and deployed.
-                        sh 'mvn install -U -B -s $MAVEN_SETTINGS_XML -f $POM_FILE '
+                        sh 'mvn install -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
                     }
                 }
             }
@@ -77,6 +80,36 @@ pipeline {
                 always {
                     junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
                 }
+            }
+        }
+
+        stage('Create and publish SBOM to Dependency-Track') {
+            options {
+                timeout(time: 10, unit: "MINUTES")
+            }
+
+            when {
+                anyOf {
+                    buildingTag()
+                    // When on master and release (ie. 'release_1.0') branches we only publish -SNAPSHOT artifacts.
+                    // This prevents trying to publish release artifacts from these branches.
+                    expression { GIT_BRANCH ==~ /(master|release_[0-9]*\.[0-9]*)/ }
+                }
+            }
+
+            steps {
+                withMaven() {
+                    configFileProvider([configFile(fileId: 'c9fdc7cf-51b3-4248-95ba-511d36cc32c2', variable: 'MAVEN_SETTINGS_XML')]) {
+                        sh 'mvn -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom'
+                    }
+                }
+
+                dependencyTrackPublisher(
+                    artifact: "target/bom.xml",
+                    projectName: "$PROJECT_NAME",
+                    projectVersion: "$MAVEN_POM_VERSION",
+                    synchronous: true
+                )
             }
         }
 
@@ -116,7 +149,7 @@ pipeline {
                             // Somewhat confusing is the configured 'SonarQube Scanner installations' in Jenkins are not used
                             // when using Maven. These are only used for projects which do not have build tool integration.
                             // For example C++ or PHP projects.
-                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $POM_FILE '
+                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
                         }
                     }
                 }
