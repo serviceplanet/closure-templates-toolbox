@@ -118,15 +118,16 @@
             We needed a version higher than 2024-02-24 which wasn't available. jitpack.io chocked on Closure Templates
             so we couldn't use that. So this is a version build from a specific commit.
 
-            * Modify the version to the GIT commit hash.
-            * Build and deploy with (source requires atleast Java 17, but property is configured to 11):
+            * Checkout a specific commit (for example; git checkout 029a3ae211ed2d2ad21f654b51c28ea24d6e8ff6)
+            * Modify the version in the POM to be the GIT commit hash.
+            * Build and deploy with:
                 mvn \
-                -Djava.version=17 \
+                -Djava.version=21 \
                 -DskipNexusStagingDeployMojo=true \
                 -DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
                 clean source:jar deploy
             -->
-			<version>b4889c83cf4354f71334e2abb4e0e3a481859da1</version>
+			<version>029a3ae211ed2d2ad21f654b51c28ea24d6e8ff6</version>
 		</dependency>
 
 		<dependency>
