@@ -91,9 +91,8 @@ pipeline {
             when {
                 anyOf {
                     buildingTag()
-                    // When on master and release (ie. 'release_1.0') branches we only publish -SNAPSHOT artifacts.
-                    // This prevents trying to publish release artifacts from these branches.
-                    expression { GIT_BRANCH ==~ /(master|release_[0-9]*\.[0-9]*)/ }
+                    // We only track vulnerabilities on the master branch.
+                    expression { GIT_BRANCH == 'master' }
                 }
             }
 
@@ -108,7 +107,12 @@ pipeline {
                     artifact: "target/bom.xml",
                     projectName: "$PROJECT_NAME",
                     projectVersion: "$MAVEN_POM_VERSION",
-                    synchronous: true
+                    synchronous: true,
+                    autoCreateProjects: true,
+                    projectProperties: [
+                        // Since we only run on the master branch via the CI build, this is always the latest version.
+                        isLatest: true
+                    ]                    
                 )
             }
         }
