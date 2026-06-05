@@ -106,13 +106,18 @@ pipeline {
                 dependencyTrackPublisher(
                     artifact: "target/bom.xml",
                     projectName: "$PROJECT_NAME",
-                    projectVersion: "$MAVEN_POM_VERSION",
+                    // We always set the version to indicate the 'master' branch. Otherwise Dependency-Track will create
+                    // a new project for each 'project' + 'version' combination. However we really only care about the
+                    // status of our 'master' branch version and don't want to have to re-add all exceptions and such
+                    // every time a new version of a project is created. Since we don't support multiple versions it is
+                    // simply not worth the effort.
+                    projectVersion: "master",
                     synchronous: true,
                     autoCreateProjects: true,
                     projectProperties: [
                         // Since we only run on the master branch via the CI build, this is always the latest version.
                         isLatest: true
-                    ]                    
+                    ]
                 )
             }
         }
