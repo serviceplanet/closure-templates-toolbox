@@ -112,22 +112,9 @@
 		</dependency>
 
 		<dependency>
-			<groupId>com.google.template</groupId>
+			<groupId>nl.serviceplanet.template</groupId>
 			<artifactId>soy</artifactId>
-			<!--
-            We needed a version higher than 2024-02-24 which wasn't available. jitpack.io chocked on Closure Templates
-            so we couldn't use that. So this is a version build from a specific commit.
-
-            * Checkout a specific commit (for example; git checkout 029a3ae211ed2d2ad21f654b51c28ea24d6e8ff6)
-            * Modify the version in the POM to be the GIT commit hash.
-            * Build and deploy with:
-                mvn \
-                -Djava.version=21 \
-                -DskipNexusStagingDeployMojo=true \
-                -DaltDeploymentRepository=third-party::https://reposilite.serviceplanet.nl/third-party/ \
-                clean source:jar deploy
-            -->
-			<version>029a3ae211ed2d2ad21f654b51c28ea24d6e8ff6</version>
+			<version>1.0.0</version>
 		</dependency>
 
 		<dependency>
