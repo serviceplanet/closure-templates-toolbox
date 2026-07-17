@@ -1,10 +1,58 @@
 # Closure Template (Soy) Toolbox
 
-This repository contains various tools for use with Google's [Closure Templates](https://github.com/google/closure-templates).
+This repository contains various tools for use with Google's [Closure Templates](https://github.com/google/closure-templates). It provide the following things;
 
-## Maven Plugin
+* [Localization (L10n) support](#localization-l10n-support)
+* [Maven Plugins](#maven-plugins)
+  * [Generate Bytecode from Soy](#soy-to-bytecode-goal)
+  * [Extract Soy translation messages](#soy-to-icu-properties-goal)
 
-Maven plugin to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven. 
+## Localization (L10n) support
+
+### Why this exists
+
+Closure Templates has excellent i18n primitives (`{msg}`, `{plural}`, `{select}`, etc.), but the open-source release ships without a usable translation pipeline for them:
+
+* Google's internal message formats (XMB / XTB) and their Translation Console integration were never open-sourced (see [closure-templates#146](https://github.com/google/closure-templates/issues/146)).
+* The only `SoyMsgPlugin` bundled with Closure Templates is XLIFF 1.2, and its generator throws a `RuntimeException` ("Xliff doesn't support plurals or genders") as soon as a message contains a plural, select or gender.
+
+So out of the box there is no way to get a `{plural}` or `{select}` message extracted, translated and rendered server-side. This toolbox fills that gap.
+
+### What this toolbox provides
+
+* `PropertiesIcuMsgPlugin` is a `SoyMsgPlugin` which writes and reads Java properties files in which each key is the Soy message ID (the stable content fingerprint computed by the Soy compiler) and each value is an [ICU MessageFormat](https://unicode-org.github.io/icu/userguide/format_parse/messages/) string. Plural, select and (nested) gender messages are fully supported. Using the same embedded ICU representation Soy uses internally.
+* The [`soy-to-icu-properties`](#soy-to-icu-properties-goal) Maven goal, which runs Soy's `SoyMsgExtractor` with this plugin at build time.
+* Runtime helpers for the rendering side:
+  * `SoyUtil.loadIcuMsgBundle(url, locale, tag, failOnError)` loads a translated properties file into a `SoyMsgBundle`. The locale is required for messages with plurals, because Soy selects the CLDR plural category (`zero` / `one` / `two` / `few` / `many` / `other`) based on the bundle's locale.
+  * `CombinedSoyMsgBundle` merges multiple bundles of the same locale into one.
+  * `VerboseSoyMsgBundle` wraps a bundle and logs (or fails on) message lookups which have no translation. Useful to detect drift between the templates and the translation files.
+
+### Workflow
+
+1. At build time, extract the messages from the templates into a source-locale properties file using the `soy-to-icu-properties` Maven goal.
+2. Import that file into your translation management system as ICU messages. We use [Tolgee](https://tolgee.io); inside plural blocks the plural variable is emitted as ICU `#`, so that Tolgee's machine translation expands the number into concrete values and picks the correct plural category per locale.
+3. Export a translated properties file per locale.
+4. At runtime, load each file with `SoyUtil.loadIcuMsgBundle(...)` and pass the bundle matching the request's locale to the renderer via `.setMsgBundle(bundle)`. This works with both SoySauce and Tofu.
+
+Example of an extracted file:
+
+```properties
+# Asset vendor
+9612312914948721=Vendor: {ASSET_VENDOR}
+
+# Asset quantity
+1619791968919851692={QUANTITY_1,plural,=1{# asset}other{# assets}}
+```
+
+### Things to be aware of
+
+* Message IDs are content fingerprints, not hand-picked keys. Changing a message's text, placeholders or `meaning` attribute changes its ID, which orphans the existing translation (translation memory in your translation management system, such as Tolgee, might recover it). Changing only the `desc` attribute does *not* change the ID. Soy's `alternateId` msg attribute can be used to keep serving the old translation while the new one is being translated.
+* The ICU plural `offset:` feature (Soy's `{plural $n offset="..."}` with `remainder()`) is not supported.
+* Properties files carry no locale metadata, while Soy needs a locale to apply plural rules. Therefor `SoyUtil.loadIcuMsgBundle` injects it via a `# SOY-BUNDLE-LOCALE <tag>` comment at the top of the file.
+
+## Maven Plugins
+
+Maven plugins to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven. 
 
 ### 'soy-to-bytecode' goal
 
@@ -33,6 +81,8 @@ Example usage:
 ```
 
 ### 'soy-to-icu-properties' goal
+
+Extracts all `{msg}` messages from the given Soy templates into a Java properties file with ICU MessageFormat values, keyed by Soy message ID. This is the extraction half of the translation pipeline described in [Localization (L10n) support](#localization-l10n-support).
 
 ```xml
 <plugin>
