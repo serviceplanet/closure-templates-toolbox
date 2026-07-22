@@ -26,7 +26,7 @@ import org.apache.maven.project.MavenProject;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
-@Mojo(name = "soy-to-icu-properties", defaultPhase = LifecyclePhase.VERIFY)
+@Mojo(name = "soy-to-icu-properties", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosureTemplatesCompilerMojo {
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
@@ -42,7 +42,7 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosu
 	private String messagePlugin;
 
 	@Override
-	public void executeMojo() throws MojoExecutionException, MojoFailureException {
+	public void execute() throws MojoExecutionException, MojoFailureException {
 		String[] args = generateCliFlags().toArray(new String[0]);
 
 		SoyMsgExtractor extractor = createSoyMsgExtractorInstance();
@@ -57,7 +57,7 @@ public final class ClosureTemplatesSoyMsgIcuPropertiesMojo extends AbstractClosu
 		List<String> args = generateBaseCliFlags();
 
 		args.add("--outputFile");
-		args.add(outputFile);
+		args.add(resolveAgainstWorkdir(outputFile).toString());
 
 		args.add("--sourceLocaleString");
 		args.add(sourceLocaleString);

@@ -108,6 +108,7 @@ sauce.renderTemplate(templateName)
 
 * Toggles and mods share one namespace.
 * A toggles file supports no syntax beyond one name per line. It does *not* support comments for example.
+* A toggles file must live under the `workdir`. Templates import it by its workdir-relative path (see [How `workdir` works](#how-workdir-works)). A toggles file outside the workdir gets an absolute logical path, which no template will spell in an import statement.
 * Toggles are only usable on the Java backends.
   * The JS/incremental-DOM backend emits a `goog.require` for a module name matching Google's internal `ts_toggle_lib` build rule, which does not exist outside Google. The Python backend rejects toggle imports outright.
 
@@ -171,13 +172,18 @@ Extracts all `{msg}` messages from the given Soy templates into a Java propertie
 
 ### Implementation
 
-This Maven plugin does some voodoo with reflection and [jnr-posix](https://github.com/jnr/jnr-posix) in order to work;
+This Maven plugin does some voodoo with reflection in order to work;
 
 * The Soy compilers are intended to be called from the CLI. For the most part there is no API tooling (like this plugin) can use. Furthermore all API which we would need to call is locked down. For example a lot of classes and methods are package private, packages are sealed (meaning you can't simply create a `com.google.soy` package yourself).
   * While we can only guess Google probably uses these compilers with Bazel. Where it simply invokes them via the CLI.
 * Invoking the main method is not going to work because the Soy compilers make a call to `System.exit`. Meaning the Maven process will exit if this plugin calls the main method of a Soy compiler.
-* [jnr-posix](https://github.com/jnr/jnr-posix) Is used because the Soy header compiler needs to be started from a specific working directory because the path passed via the `--srcs` command determines the unique name for the template. In Java you can't change the working directory of the current process. Simply changing the `user.dir` property turned out not to be enough to fool the Soy compiler.
 
-Ideally the Soy compilers would have some form of API for tooling to use. 
+Ideally the Soy compilers would have some form of API for tooling to use.
 
-An alternative to this implementation would be to start a separate process and JVM with the Soy compiler. The disadvantage of this is that one would need to determine what the correct `java` binary is to start the JVM. In for example a CI container this might be different then a local machine.
+#### How `workdir` works
+
+The Soy compiler knows each source and toggles file by the literal path string it is handed. That string becomes the file's logical path, which ends up as the template's file path (for example in the Soy header compiler's output) and is what toggle import statements are matched against, as an exact string. So the paths passed to the compiler must be spelled workdir-relative, even though the Maven JVM runs somewhere else entirely.
+
+This plugin therefore resolves every path against `workdir` to an absolute path (which resolves independently of the working directory of the process) and passes the Soy compiler a `--generated_files` mapping from each absolute path back to its workdir-relative logical path. Template names and toggle import paths come out workdir-relative, exactly as if the compiler had been started from the workdir. `--allow_unblessed_generated_files` Defaults to true, so this mapping carries no extra validation.
+
+All of this ensures the Maven plugin can be used in Maven parallel builds.

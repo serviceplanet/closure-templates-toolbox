@@ -39,7 +39,7 @@ import java.util.zip.ZipInputStream;
  *
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */
-@Mojo(name = "soy-to-bytecode", defaultPhase = LifecyclePhase.VERIFY)
+@Mojo(name = "soy-to-bytecode", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplatesCompilerMojo {
 
 	/**
@@ -67,7 +67,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 	private Path compiledTemplatesJar = null;
 
 	@Override
-	public void executeMojo() throws MojoExecutionException, MojoFailureException {
+	public void execute() throws MojoExecutionException, MojoFailureException {
 		try {
 			try {
 				compiledTemplatesJar = Files.createTempFile("soy-bytecode", ".jar");
@@ -123,7 +123,7 @@ public final class ClosureTemplatesSoyToJbcMojo extends AbstractClosureTemplates
 
 		if (javaExternDefnJars != null && !javaExternDefnJars.isBlank()) {
 			compilerCliArgs.add(JAVA_EXTERN_DEFN_JARS_FLAG);
-			compilerCliArgs.add(javaExternDefnJars);
+			compilerCliArgs.add(resolvePathsAgainstWorkdir(javaExternDefnJars));
 		}
 
 		return compilerCliArgs;

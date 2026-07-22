@@ -16,21 +16,29 @@
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
 import com.google.common.base.Strings;
-import jnr.posix.POSIXFactory;
+import com.google.common.collect.ImmutableSet;
 import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Parameter;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Handles generating command line arguments for options defined in the {@code com.google.template.soy.AbstractSoyCompiler}
  * class which are shared between various Soy compilers.
+ * <br /><br />
+ * The Soy compiler knows each source and toggles file by the literal path string it is handed. That string becomes the
+ * file's logical path, which is what ends up as the template's file path and what toggle import statements are matched
+ * against (as an exact string). To keep those logical paths stable regardless of where the Maven JVM happens to run,
+ * this plugin resolves all paths against {@link #workdir} to absolute paths and passes the Soy compiler a
+ * {@code --generated_files} mapping from each absolute path back to its workdir-relative logical path.
  *
  * @author Jasper Siepkes <siepkes@serviceplanet.nl>
  */
@@ -48,19 +56,25 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	private static final String INDIRECT_DEP_HEADERS_FLAG = "--indirectDepHeaders";
 
 	private static final String JAVA_EXTERN_DEFINITIONS_FLAG = "--java_extern_defn_jars";
+
 	/** Soy compiler CLI flag to specify which Soy toggles files declare the available toggles. */
 	private static final String TOGGLES_FILES_FLAG = "--togglesFiles";
 
 	/**
-	 * For various Soy compilers, such as the Soy header compiler, the working directory from which the compiler is
-	 * invoked is significant. For example in case of the Soy header compiler the full path used in the Soy compiler
-	 * {@code --srcs} flag ends-up in the name of the template in the Protobuf header file. In which case you probably
-	 * want to set the {@code workdir} to something like {@code ${project.basedir}/src/main/resources} in your POM and use
-	 * the {@code --srcs} flag with relative paths.
+	 * Soy compiler CLI flag holding a map of {@code real path=logical path} entries. The compiler reads each file
+	 * through its real path but knows it by its logical path. This is what lets this plugin pass absolute paths (which
+	 * resolve independently of the working directory) while keeping template names and toggle import paths
+	 * workdir-relative.
+	 */
+	private static final String GENERATED_FILES_FLAG = "--generated_files";
+
+	/**
+	 * The base directory against which the relative paths of the other parameters are resolved. It also determines the
+	 * logical name of each source and toggles file. A file under the workdir is known to the Soy compiler by its
+	 * workdir-relative path, which is what ends up as the template's file path and as the path templates must import a
+	 * toggles file by. Typically something like {@code ${project.basedir}/src/main/resources}.
 	 * <br /><br />
-	 * If you don't explicitly need this (for example the Soy compiler in question does not rely on relative paths) you
-	 * are discouraged from using this. The reason is this uses voodoo at the lower levels which might break in the
-	 * future.
+	 * When unset, paths resolve against the directory the Maven JVM was launched from.
 	 */
 	@Parameter(property = "workdir")
 	protected String workdir;
@@ -128,7 +142,12 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	protected String javaExternDefinitionJars;
 
 	/**
-	 * Comma separated list of file paths of Soy toggles files.
+	 * Comma separated list of file paths of Soy toggles files. A toggles file is a plain newline-delimited list of
+	 * toggle (feature flag) names, which templates make available with an import statement, after which the toggle can
+	 * be used as a {@code bool}.
+	 * <br /><br />
+	 * A relative path is resolved against {@link #workdir} and doubles as the path templates must import the toggles
+	 * file by.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code togglesFiles} flag.
 	 */
@@ -136,12 +155,11 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	protected String togglesFiles;
 
 	/**
-	 * Finds all Soy toggles files under the specified path and passes them as comma-separated relative paths to the
-	 * Soy compiler.
+	 * Finds all Soy toggles files under the specified path and passes them to the Soy compiler.
 	 * <br /><br />
-	 * Because the discovered paths are the paths templates have to import the toggles files by, this should be a path
-	 * relative to {@code workdir} (typically {@code .}, to search the whole Soy source root). An absolute base path
-	 * yields absolute import paths, which is almost certainly not what the templates spell.
+	 * Toggles files under {@link #workdir} are known to the compiler by their workdir-relative path, which is the path
+	 * templates must import them by. A toggles file <em>outside</em> the workdir gets an absolute logical path, which
+	 * no template will spell in an import statement. Keep toggles files under the workdir.
 	 * <br /><br />
 	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code togglesFiles} flag.
 	 */
@@ -151,51 +169,147 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	protected List<String> generateBaseCliFlags() {
 		List<String> baseCliFlags = new ArrayList<>();
 
+		Path workdirPath = workdirPath();
+		// Maps the absolute path this plugin hands the Soy compiler for each source and toggles file to the
+		// workdir-relative logical path the compiler should know the file by. Passed via the --generated_files flag.
+		Map<String, String> logicalPaths = new LinkedHashMap<>();
+
 		baseCliFlags.add(SRCS_FLAG);
 		baseCliFlags.add(combine(
-				isBlank(soySourcesBasePath) ? null : SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath)),
-				soySources));
+				discoverFiles(soySourcesBasePath, SoyFileDiscovery::findSoyFiles, workdirPath, logicalPaths),
+				resolvePaths(soySources, workdirPath, logicalPaths)));
 
 		if (!isBlank(directProtoDeps)) {
 			baseCliFlags.add(DIRECT_PROTO_DEPS_FLAG);
-			baseCliFlags.add(directProtoDeps);
+			baseCliFlags.add(resolvePaths(directProtoDeps, workdirPath, null));
 		}
 
 		if (!isBlank(indirectProtoDeps)) {
 			baseCliFlags.add(INDIRECT_PROTO_DEPS_FLAG);
-			baseCliFlags.add(indirectProtoDeps);
+			baseCliFlags.add(resolvePaths(indirectProtoDeps, workdirPath, null));
 		}
 
 		if (!isBlank(depHeaders)) {
 			baseCliFlags.add(DEP_HEADERS_FLAG);
-			baseCliFlags.add(depHeaders);
+			baseCliFlags.add(resolvePaths(depHeaders, workdirPath, null));
 		}
 
 		if (!isBlank(indirectDepHeaders)) {
 			baseCliFlags.add(INDIRECT_DEP_HEADERS_FLAG);
-			baseCliFlags.add(indirectDepHeaders);
+			baseCliFlags.add(resolvePaths(indirectDepHeaders, workdirPath, null));
 		}
 
 		if (!isBlank(javaExternDefinitionJars)) {
 			baseCliFlags.add(JAVA_EXTERN_DEFINITIONS_FLAG);
-			baseCliFlags.add(javaExternDefinitionJars);
+			baseCliFlags.add(resolvePaths(javaExternDefinitionJars, workdirPath, null));
 		}
 
 		String allTogglesFiles = combine(
-				isBlank(togglesFilesBasePath)
-						? null
-						: SoyFileDiscovery.findTogglesFilesAsCSV(Path.of(togglesFilesBasePath)),
-				togglesFiles);
+				discoverFiles(togglesFilesBasePath, SoyFileDiscovery::findTogglesFiles, workdirPath, logicalPaths),
+				resolvePaths(togglesFiles, workdirPath, logicalPaths));
 		if (!allTogglesFiles.isEmpty()) {
 			baseCliFlags.add(TOGGLES_FILES_FLAG);
 			baseCliFlags.add(allTogglesFiles);
 		}
 
+		if (!logicalPaths.isEmpty()) {
+			baseCliFlags.add(GENERATED_FILES_FLAG);
+			baseCliFlags.add(logicalPaths.entrySet().stream()
+					.map(entry -> entry.getKey() + "=" + entry.getValue())
+					.collect(Collectors.joining(",")));
+		}
+
 		return baseCliFlags;
 	}
-	
+
+	/**
+	 * The absolute base directory against which all relative paths are resolved.
+	 */
+	private Path workdirPath() {
+		return (isBlank(workdir) ? Path.of("") : Path.of(workdir)).toAbsolutePath().normalize();
+	}
+
+	/**
+	 * Resolves a single path (such as an output file) against {@link #workdir} when it is relative. For use by
+	 * subclasses on their own path parameters.
+	 */
+	protected Path resolveAgainstWorkdir(String path) {
+		return workdirPath().resolve(path).normalize();
+	}
+
+	/**
+	 * Resolves each relative path in the comma-separated list against {@link #workdir}. For use by subclasses on
+	 * their own path parameters.
+	 */
+	protected String resolvePathsAgainstWorkdir(String csvPaths) {
+		return resolvePaths(csvPaths, workdirPath(), null);
+	}
+
+	/**
+	 * Finds all files with the discovery function under the base path (resolved against the workdir) and returns them
+	 * as a comma-separated list of absolute paths, registering the workdir-relative logical path of each file found
+	 * under the workdir.
+	 */
+	private static String discoverFiles(String basePath, Function<Path, ImmutableSet<Path>> discovery,
+			Path workdirPath, Map<String, String> logicalPaths) {
+		if (isBlank(basePath)) {
+			return "";
+		}
+
+		Path base = workdirPath.resolve(basePath).normalize();
+		return discovery.apply(base).stream()
+				.map(file -> {
+					String absolute = file.toString();
+					if (file.startsWith(workdirPath)) {
+						logicalPaths.put(absolute, toLogicalPath(workdirPath.relativize(file)));
+					}
+					return absolute;
+				})
+				.collect(Collectors.joining(","));
+	}
+
+	/**
+	 * Resolves each relative path in the comma-separated list against the workdir, returning a comma-separated list of
+	 * absolute paths. When {@code logicalPaths} is given, each resolved relative path is registered with its original
+	 * relative spelling as the logical path. Absolute paths are passed through untouched (and thus keep an absolute
+	 * logical path).
+	 */
+	private static String resolvePaths(String csvPaths, Path workdirPath, Map<String, String> logicalPaths) {
+		if (isBlank(csvPaths)) {
+			return "";
+		}
+
+		return Arrays.stream(csvPaths.split(","))
+				.filter(path -> !isBlank(path))
+				.map(pathStr -> {
+					Path path = Path.of(pathStr);
+					if (path.isAbsolute()) {
+						return pathStr;
+					}
+
+					Path relative = path.normalize();
+					String absolute = workdirPath.resolve(relative).toString();
+					if (logicalPaths != null) {
+						logicalPaths.put(absolute, toLogicalPath(relative));
+					}
+					return absolute;
+				})
+				.collect(Collectors.joining(","));
+	}
+
+	/**
+	 * Logical paths (template file paths, toggle import paths) always use forward slashes, also on Windows.
+	 */
+	private static String toLogicalPath(Path relativePath) {
+		return relativePath.toString().replace(File.separatorChar, '/');
+	}
+
+	/**
+	 * Whether the value is unset, i.e. null, empty or whitespace only. Guava offers {@code Strings.isNullOrEmpty},
+	 * but no variant which also treats a whitespace-only value as unset.
+	 */
 	private static boolean isBlank(String value) {
-		return value == null || value.isBlank();
+		return Strings.nullToEmpty(value).isBlank();
 	}
 
 	/**
@@ -206,39 +320,4 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 				.filter(value -> !isBlank(value))
 				.collect(Collectors.joining(","));
 	}
-
-	/**
-	 * You should probably not override this method, override {@link #executeMojo()} instead. This method ensures
-	 * various base settings get configured.
-	 */
-	@Override
-	public void execute() throws MojoExecutionException, MojoFailureException {
-		String originalWorkDir = System.getProperty("user.dir");
-
-		try {
-			if (workdir != null && !workdir.isBlank()) {
-				String workdirStr = null;
-
-				try {
-					workdirStr = Path.of(workdir).toAbsolutePath().toString();
-					getLog().debug(String.format("Using workdir '%s'.", workdirStr));
-					POSIXFactory.getNativePOSIX().chdir(workdirStr);
-				} catch (Exception e) {
-					throw new RuntimeException(String.format("Unable to change work dir to '%s'", workdirStr), e);
-				}
-			}
-
-			executeMojo();
-		} finally {
-			try {
-				if (workdir != null) {
-					POSIXFactory.getNativePOSIX().chdir(originalWorkDir);
-				}
-			} catch (Exception e) {
-				getLog().debug(String.format("Unable to revert workdir to original '%s'.", originalWorkDir), e);
-			}
-		}
-	}
-
-	public abstract void executeMojo() throws MojoExecutionException, MojoFailureException;
 }

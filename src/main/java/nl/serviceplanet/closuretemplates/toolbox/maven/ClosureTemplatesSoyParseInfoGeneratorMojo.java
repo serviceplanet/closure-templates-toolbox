@@ -26,7 +26,7 @@ import org.apache.maven.project.MavenProject;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
-@Mojo(name = "soy-parse-info-generator", defaultPhase = LifecyclePhase.GENERATE_SOURCES)
+@Mojo(name = "soy-parse-info-generator", defaultPhase = LifecyclePhase.GENERATE_SOURCES, threadSafe = true)
 public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClosureTemplatesCompilerMojo {
 
 	@Parameter(defaultValue = "${project}", required = true, readonly = true)
@@ -39,7 +39,7 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 	private String outputDirectory;
 
 	@Override
-	public void executeMojo() throws MojoExecutionException, MojoFailureException {
+	public void execute() throws MojoExecutionException, MojoFailureException {
 		String[] args = generateCliFlags().toArray(new String[0]);
 
 		SoyParseInfoGenerator generator = createSoyParseInfoGeneratorInstance();
@@ -50,7 +50,7 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 		}
 
 		// N.B.: add the generated java-source as a source-root
-		project.addCompileSourceRoot(outputDirectory);
+		project.addCompileSourceRoot(resolveAgainstWorkdir(outputDirectory).toString());
 	}
 
 	private List<String> generateCliFlags() {
@@ -65,7 +65,7 @@ public final class ClosureTemplatesSoyParseInfoGeneratorMojo extends AbstractClo
 		args.add("filename");
 
 		args.add("--outputDirectory");
-		args.add(outputDirectory);
+		args.add(resolveAgainstWorkdir(outputDirectory).toString());
 
 		return args;
 	}

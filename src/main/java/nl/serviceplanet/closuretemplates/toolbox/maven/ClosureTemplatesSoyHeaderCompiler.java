@@ -29,7 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-@Mojo(name = "soy-header-compiler", defaultPhase = LifecyclePhase.VERIFY)
+@Mojo(name = "soy-header-compiler", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemplatesCompilerMojo {
 
 	private static final String OUTPUT_FLAG = "--output";
@@ -41,7 +41,7 @@ public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemp
 	private String outputFile;
 
 	@Override
-	public void executeMojo() throws MojoExecutionException, MojoFailureException {
+	public void execute() throws MojoExecutionException, MojoFailureException {
 		getLog().debug("Invoking Soy header compiler.");
 
 		ensureOutputDirectoryExists();
@@ -54,7 +54,7 @@ public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemp
 	}
 
 	private void ensureOutputDirectoryExists() throws MojoExecutionException {
-		Path outputDirectory = Path.of(outputFile).getParent();
+		Path outputDirectory = resolveAgainstWorkdir(outputFile).getParent();
 		try {
 			Files.createDirectories(outputDirectory);
 		} catch (Exception e) {
@@ -69,7 +69,7 @@ public final class ClosureTemplatesSoyHeaderCompiler extends AbstractClosureTemp
 		List<String> compilerCliArgs = generateBaseCliFlags();
 
 		compilerCliArgs.add(OUTPUT_FLAG);
-		compilerCliArgs.add(outputFile);
+		compilerCliArgs.add(resolveAgainstWorkdir(outputFile).toString());
 
 		return compilerCliArgs;
 	}
