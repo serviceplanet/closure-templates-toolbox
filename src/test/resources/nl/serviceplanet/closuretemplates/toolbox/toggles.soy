@@ -1,0 +1,8 @@
+{namespace nl.serviceplanet}
+
+import {NEW_CHECKOUT, BETA_BANNER} from 'nl/serviceplanet/closuretemplates/toolbox/feature.toggles';
+
+{template tmpl}
+    {if BETA_BANNER}[beta]{/if}
+    {if NEW_CHECKOUT}New checkout{else}Old checkout{/if}
+{/template}

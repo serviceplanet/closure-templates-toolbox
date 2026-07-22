@@ -25,6 +25,7 @@ import com.google.template.soy.soytree.SoyNode;
 import com.google.template.soy.soytree.TemplateNode;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.PropertiesIcuMsgPlugin;
 import nl.serviceplanet.closuretemplates.toolbox.msgbundle.VerboseSoyMsgBundle;
+import nl.serviceplanet.closuretemplates.toolbox.toggle.ToggleFile;
 
 import java.io.IOException;
 import java.net.URL;
@@ -32,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -109,15 +111,21 @@ public final class SoyUtil {
 				.templateNode();
 	}
 
-	public static SoyCompilation compileSoyFile(String filename) throws Exception {
-		return compileSoyFile(Resources.getResource(filename), filename);
+	public static SoyCompilation compileSoyFile(String filename, ToggleFile... toggleFiles) throws Exception {
+		return compileSoyFile(Resources.getResource(filename), filename, toggleFiles);
 	}
 
-	public static SoyCompilation compileSoyFile(URL url, String filename) throws Exception {
+	/**
+	 * @param toggleFiles the toggles files the template imports its toggles from, if any. Unlike the Maven goals, which
+	 *        hand the toggles files to the Soy compiler themselves, a template compiled through this method only
+	 *        resolves the toggle imports of the toggles files passed here.
+	 */
+	public static SoyCompilation compileSoyFile(URL url, String filename, ToggleFile... toggleFiles) throws Exception {
 		String soyText = Resources.toString(url, StandardCharsets.UTF_8);
 
 		return compileSoyFileSet(SoyFileSet.builder()
 				.add(soyText, url.toString())
+				.setToggleRegistry(ToggleFile.toggleRegistry(Arrays.asList(toggleFiles)))
 				.build());
 	}
 }

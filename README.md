@@ -3,6 +3,7 @@
 This repository contains various tools for use with Google's [Closure Templates](https://github.com/google/closure-templates). It provide the following things;
 
 * [Localization (L10n) support](#localization-l10n-support)
+* [Toggles (feature flags) support](#toggles-feature-flags-support)
 * [Maven Plugins](#maven-plugins)
   * [Generate Bytecode from Soy](#soy-to-bytecode-goal)
   * [Extract Soy translation messages](#soy-to-icu-properties-goal)
@@ -50,9 +51,72 @@ Example of an extracted file:
 * The ICU plural `offset:` feature (Soy's `{plural $n offset="..."}` with `remainder()`) is not supported.
 * Properties files carry no locale metadata, while Soy needs a locale to apply plural rules. Therefor `SoyUtil.loadIcuMsgBundle` injects it via a `# SOY-BUNDLE-LOCALE <tag>` comment at the top of the file.
 
+## Toggles (feature flags) support
+
+### Why this exists
+
+Closure Templates has a first-class feature flag primitive called a _toggle_. A `.toggles` file is a plain newline-delimited list of flag names, which a template imports and then uses as a `bool`:
+
+```soy
+{namespace nl.serviceplanet.app}
+
+import {NEW_CHECKOUT} from 'nl/serviceplanet/app/feature.toggles';
+
+{template checkout}
+    {if NEW_CHECKOUT}New checkout{else}Old checkout{/if}
+{/template}
+```
+
+The compiler only knows about a toggles file if it is passed via the `--togglesFiles` flag. On the rendering side toggles are evaluated through the renderer's _active mod selector_. Which works on both SoySauce and Tofu.
+
+### What this toolbox provides
+
+* The `togglesFiles` and `togglesFilesBasePath` parameters on all Maven goals, which pass the toggles files to the Soy compiler.
+* `ToggleFile` reads a `.toggles` file. It also builds the registry needed to compile templates with toggle imports programmatically (`SoyUtil.compileSoyFile(filename, toggleFile)`), which the compiler otherwise only accepts via the CLI flag.
+* `SoyToggles` builds the `Predicate<String>` the renderer wants, checked against the toggles the templates actually declare.
+
+### Workflow
+
+1. Put a `.toggles` file next to your templates and import the flags you need.
+2. Point the Maven goals at it, so the compiler can resolve the imports:
+
+```xml
+<configuration>
+    <workdir>${soy.root}</workdir>
+    <soySourcesBasePath>.</soySourcesBasePath>
+    <togglesFilesBasePath>.</togglesFilesBasePath>
+</configuration>
+```
+
+3. At runtime, tell the renderer which flags are on:
+
+```java
+ToggleFile featureToggles = ToggleFile.fromClasspath("nl/serviceplanet/app/feature.toggles");
+
+SoyToggles toggles = SoyToggles.builder()
+        .declareFrom(featureToggles)
+        .enable("NEW_CHECKOUT")
+        .build();
+
+sauce.renderTemplate(templateName)
+        .setData(data)
+        .setActiveModSelector(toggles.activeModSelector())
+        .renderHtml();
+```
+
+### Things to be aware of
+
+* Toggles and mods share one namespace.
+* A toggles file supports no syntax beyond one name per line. It does *not* support comments for example.
+* Toggles are only usable on the Java backends.
+  * The JS/incremental-DOM backend emits a `goog.require` for a module name matching Google's internal `ts_toggle_lib` build rule, which does not exist outside Google. The Python backend rejects toggle imports outright.
+
 ## Maven Plugins
 
-Maven plugins to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven. 
+Maven plugins to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven.
+
+All goals share the parameters of the Soy compiler they wrap, such as `soySources` / `soySourcesBasePath`, `workdir`, the proto and header dependency parameters, and `togglesFiles` / `togglesFilesBasePath` (see [Toggles support](#toggles-feature-flags-support)).
+
 
 ### 'soy-to-bytecode' goal
 

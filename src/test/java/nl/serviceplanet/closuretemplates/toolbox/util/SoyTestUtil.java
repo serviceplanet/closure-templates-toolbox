@@ -29,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public final class SoyTestUtil {
 	public static void main(String[] args) throws Exception {
@@ -86,10 +87,21 @@ public final class SoyTestUtil {
 	}
 
 	public static String render(SoySauce sauce, String templateName, Map<String, ?> data, SoyMsgBundle bundle) {
-		return sauce
+		return render(sauce, templateName, data, bundle, null);
+	}
+
+	public static String render(SoySauce sauce, String templateName, Map<String, ?> data, SoyMsgBundle bundle,
+			Predicate<String> activeModSelector) {
+		SoySauce.Renderer renderer = sauce
 				.renderTemplate(templateName)
 				.setData(data)
-				.setMsgBundle(Optional.ofNullable(bundle).orElse(SoyMsgBundle.EMPTY))
+				.setMsgBundle(Optional.ofNullable(bundle).orElse(SoyMsgBundle.EMPTY));
+
+		if (activeModSelector != null) {
+			renderer = renderer.setActiveModSelector(activeModSelector);
+		}
+
+		return renderer
 				.renderHtml()
 				.get()
 				.toSafeHtml()

@@ -26,31 +26,58 @@ import java.util.stream.Stream;
 
 public final class SoyFileDiscovery {
 
+	private static final String SOY_EXTENSION = ".soy";
+
+	private static final String TOGGLES_EXTENSION = ".toggles";
+
 	/**
 	 * Returns all Soy files under the specified base path as a string of comma-separated relative paths.
 	 */
 	public static String findSoyFilesAsCSV(Path basePath) {
-		return findSoyFiles(basePath).stream()
+		return asCSV(findSoyFiles(basePath));
+	}
+
+	public static ImmutableSet<Path> findSoyFiles(Path basePath) {
+		return findFiles(basePath, SOY_EXTENSION);
+	}
+
+	/**
+	 * Returns all Soy toggles files under the specified base path as a string of comma-separated relative paths.
+	 */
+	public static String findTogglesFilesAsCSV(Path basePath) {
+		return asCSV(findTogglesFiles(basePath));
+	}
+
+	public static ImmutableSet<Path> findTogglesFiles(Path basePath) {
+		return findFiles(basePath, TOGGLES_EXTENSION);
+	}
+
+	private static String asCSV(ImmutableSet<Path> paths) {
+		return paths.stream()
 				.map(Path::toString)
 				.collect(Collectors.joining(","));
 	}
 
-	public static ImmutableSet<Path> findSoyFiles(Path basePath) {
+	private static ImmutableSet<Path> findFiles(Path basePath, String extension) {
 		if (!Files.exists(basePath)) {
 			throw new IllegalArgumentException("base-path not found: " + basePath + ", absolute-path: " + basePath.toAbsolutePath());
 		}
 
 		if (Files.isRegularFile(basePath)) {
-			return ImmutableSet.of(basePath);
+			return ImmutableSet.of(basePath.normalize());
 		}
 
 		try (Stream<Path> stream = Files.walk(basePath, 200)) {
 			return stream
-					.filter(path -> path.getFileName().toString().endsWith(".soy"))
+					.filter(path -> path.getFileName().toString().endsWith(extension))
+					// The Soy compiler treats the path we hand it as an opaque string. It becomes the template's
+					// logical path, which toggle imports have to match exactly. A base path of '.' would otherwise
+					// yield './foo/bar.soy', which matches no import of 'foo/bar.soy'.
+					.map(Path::normalize)
 					.sorted(Comparator.comparing(x -> x.toString().contains("/target/")).reversed().thenComparing(Object::toString))
 					.collect(ImmutableSet.toImmutableSet());
 		} catch (Exception e) {
-			throw new IllegalStateException(String.format("Failed searching for soy-files in: '%s'.", basePath), e);
+			throw new IllegalStateException(String.format("Failed searching for '%s' files in: '%s'.", extension, basePath), e);
 		}
 	}
 }

@@ -15,6 +15,7 @@
  */
 package nl.serviceplanet.closuretemplates.toolbox.maven;
 
+import com.google.common.base.Strings;
 import jnr.posix.POSIXFactory;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -23,7 +24,9 @@ import org.apache.maven.plugins.annotations.Parameter;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Handles generating command line arguments for options defined in the {@code com.google.template.soy.AbstractSoyCompiler}
@@ -45,6 +48,8 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	private static final String INDIRECT_DEP_HEADERS_FLAG = "--indirectDepHeaders";
 
 	private static final String JAVA_EXTERN_DEFINITIONS_FLAG = "--java_extern_defn_jars";
+	/** Soy compiler CLI flag to specify which Soy toggles files declare the available toggles. */
+	private static final String TOGGLES_FILES_FLAG = "--togglesFiles";
 
 	/**
 	 * For various Soy compilers, such as the Soy header compiler, the working directory from which the compiler is
@@ -122,48 +127,84 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	@Parameter(property = "javaExternDefinitionJars")
 	protected String javaExternDefinitionJars;
 
+	/**
+	 * Comma separated list of file paths of Soy toggles files.
+	 * <br /><br />
+	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code togglesFiles} flag.
+	 */
+	@Parameter(property = "togglesFiles")
+	protected String togglesFiles;
+
+	/**
+	 * Finds all Soy toggles files under the specified path and passes them as comma-separated relative paths to the
+	 * Soy compiler.
+	 * <br /><br />
+	 * Because the discovered paths are the paths templates have to import the toggles files by, this should be a path
+	 * relative to {@code workdir} (typically {@code .}, to search the whole Soy source root). An absolute base path
+	 * yields absolute import paths, which is almost certainly not what the templates spell.
+	 * <br /><br />
+	 * Contents are passed to the Closure templates / Soy compiler as arguments of the {@code togglesFiles} flag.
+	 */
+	@Parameter(property = "togglesFilesBasePath")
+	protected String togglesFilesBasePath;
+
 	protected List<String> generateBaseCliFlags() {
 		List<String> baseCliFlags = new ArrayList<>();
 
-		String allSoySources = "";
-		if (soySourcesBasePath != null && !soySourcesBasePath.isBlank()) {
-			allSoySources += SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath));
-		}
-		if (soySources != null && !soySources.isBlank()) {
-			if (!allSoySources.isEmpty()) {
-				allSoySources += ",";
-			}
-			allSoySources += soySources;
-		}
 		baseCliFlags.add(SRCS_FLAG);
-		baseCliFlags.add(allSoySources);
+		baseCliFlags.add(combine(
+				isBlank(soySourcesBasePath) ? null : SoyFileDiscovery.findSoyFilesAsCSV(Path.of(soySourcesBasePath)),
+				soySources));
 
-		if (directProtoDeps != null && !directProtoDeps.isBlank()) {
+		if (!isBlank(directProtoDeps)) {
 			baseCliFlags.add(DIRECT_PROTO_DEPS_FLAG);
 			baseCliFlags.add(directProtoDeps);
 		}
 
-		if (indirectProtoDeps != null && !indirectProtoDeps.isBlank()) {
+		if (!isBlank(indirectProtoDeps)) {
 			baseCliFlags.add(INDIRECT_PROTO_DEPS_FLAG);
 			baseCliFlags.add(indirectProtoDeps);
 		}
 
-		if (depHeaders != null && !depHeaders.isBlank()) {
+		if (!isBlank(depHeaders)) {
 			baseCliFlags.add(DEP_HEADERS_FLAG);
 			baseCliFlags.add(depHeaders);
 		}
 
-		if (indirectDepHeaders != null && !indirectDepHeaders.isBlank()) {
+		if (!isBlank(indirectDepHeaders)) {
 			baseCliFlags.add(INDIRECT_DEP_HEADERS_FLAG);
 			baseCliFlags.add(indirectDepHeaders);
 		}
 
-		if (javaExternDefinitionJars != null && !javaExternDefinitionJars.isBlank()) {
+		if (!isBlank(javaExternDefinitionJars)) {
 			baseCliFlags.add(JAVA_EXTERN_DEFINITIONS_FLAG);
 			baseCliFlags.add(javaExternDefinitionJars);
 		}
 
+		String allTogglesFiles = combine(
+				isBlank(togglesFilesBasePath)
+						? null
+						: SoyFileDiscovery.findTogglesFilesAsCSV(Path.of(togglesFilesBasePath)),
+				togglesFiles);
+		if (!allTogglesFiles.isEmpty()) {
+			baseCliFlags.add(TOGGLES_FILES_FLAG);
+			baseCliFlags.add(allTogglesFiles);
+		}
+
 		return baseCliFlags;
+	}
+	
+	private static boolean isBlank(String value) {
+		return value == null || value.isBlank();
+	}
+
+	/**
+	 * Joins the non-blank arguments into a single comma-separated list.
+	 */
+	private static String combine(String... values) {
+		return Arrays.stream(values)
+				.filter(value -> !isBlank(value))
+				.collect(Collectors.joining(","));
 	}
 
 	/**
