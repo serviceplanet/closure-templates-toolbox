@@ -78,7 +78,9 @@ pipeline {
 
             post {
                 always {
-                    junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
+                    // The 'TEST-*.xml' pattern for Failsafe is deliberate: 'failsafe-summary.xml' is not in the
+                    // JUnit report format and would break the parser.
+                    junit testResults: '**/target/surefire-reports/*.xml,**/target/failsafe-reports/TEST-*.xml', allowEmptyResults: true
                 }
             }
         }
@@ -113,7 +115,6 @@ pipeline {
                     // simply not worth the effort.
                     projectVersion: "master",
                     synchronous: true,
-                    autoCreateProjects: true,
                     projectProperties: [
                         // Since we only run on the master branch via the CI build, this is always the latest version.
                         isLatest: true
@@ -125,9 +126,9 @@ pipeline {
         stage('Build and Publish') {
             // Used for continuous building and deploying of snapshot and release artifacts.
             //
-            // It does the building and deploying in a single Maven step. This is the only way we can currently build
-            // and deploy without having Maven build everything twice. Which is problematic for projects that take a
-            // while to build. See the following for more information:
+            // It does the building, SonarQube analysis and deploying in a single Maven invocation.
+            //
+            // See the following for more information:
             //
             // * https://phabricator.serviceplanet.nl/T9728
             // * https://stackoverflow.com/questions/45739800/deploying-maven-artifacts-without-rebuilding
@@ -155,12 +156,27 @@ pipeline {
                             // -U Flag forces re-resolution of all artifacts even if they couldn't be found previously.
                             // -B Flag enables batch mode. Disables spamming the logs with download progress among things.
                             //
+                            // Note that the deploy plugin is invoked as a bare goal ('maven-deploy-plugin:deploy') and
+                            // NOT as the 'deploy' lifecycle phase. Listing both the 'install' and 'deploy' phases on
+                            // one command line makes Maven run the default lifecycle twice for every module. That
+                            // builds everything twice.
+                            //
                             // Somewhat confusing is the configured 'SonarQube Scanner installations' in Jenkins are not used
                             // when using Maven. These are only used for projects which do not have build tool integration.
                             // For example C++ or PHP projects.
-                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
+                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar org.apache.maven.plugins:maven-deploy-plugin:deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
                         }
                     }
+                }
+            }
+
+            post {
+                always {
+                    // Deploy builds must record that tests ran and passed (see the 'Security testing and
+                    // acceptance' page in the engineering manual, TA-DEV-01 / ISO 27002 8.29). With
+                    // 'allowEmptyResults: false' a build which produced no test results at all fails instead of
+                    // silently going green.
+                    junit testResults: '**/target/surefire-reports/*.xml,**/target/failsafe-reports/TEST-*.xml', allowEmptyResults: false
                 }
             }
         }
