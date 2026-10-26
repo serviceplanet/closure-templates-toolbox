@@ -101,7 +101,7 @@ pipeline {
             steps {
                 withMaven() {
                     configFileProvider([configFile(fileId: 'c9fdc7cf-51b3-4248-95ba-511d36cc32c2', variable: 'MAVEN_SETTINGS_XML')]) {
-                        sh 'mvn -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom'
+                        sh 'mvn -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeAggregateBom'
                     }
                 }
 
@@ -164,7 +164,7 @@ pipeline {
                             // Somewhat confusing is the configured 'SonarQube Scanner installations' in Jenkins are not used
                             // when using Maven. These are only used for projects which do not have build tool integration.
                             // For example C++ or PHP projects.
-                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar org.apache.maven.plugins:maven-deploy-plugin:deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
+                            sh 'mvn clean install org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar org.apache.maven.plugins:maven-deploy-plugin:deploy -Dsonar.kubernetes.activate=false -Dsonar.scanner.os=linux -Dsonar.scanner.javaExePath=java -Dsonar.branch.name=${GIT_BRANCH} -U -B -s $MAVEN_SETTINGS_XML -f $MAVEN_POM_FILE '
                         }
                     }
                 }
