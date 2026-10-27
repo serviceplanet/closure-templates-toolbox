@@ -246,9 +246,18 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	}
 
 	/**
+	 * Finds all files with the discovery function under the base path (resolved against {@link #workdir}) and returns
+	 * them as a comma-separated list of absolute paths. For use by subclasses on their own base path parameters, for
+	 * files which are not known to the Soy compiler by a logical path (such as conformance configs).
+	 */
+	protected String discoverFilesAgainstWorkdir(String basePath, Function<Path, ImmutableSet<Path>> discovery) {
+		return discoverFiles(basePath, discovery, workdirPath(), null);
+	}
+
+	/**
 	 * Finds all files with the discovery function under the base path (resolved against the workdir) and returns them
-	 * as a comma-separated list of absolute paths, registering the workdir-relative logical path of each file found
-	 * under the workdir.
+	 * as a comma-separated list of absolute paths. When {@code logicalPaths} is given, the workdir-relative logical
+	 * path of each file found under the workdir is registered in it.
 	 */
 	private static String discoverFiles(String basePath, Function<Path, ImmutableSet<Path>> discovery,
 			Path workdirPath, Map<String, String> logicalPaths) {
@@ -260,7 +269,7 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 		return discovery.apply(base).stream()
 				.map(file -> {
 					String absolute = file.toString();
-					if (file.startsWith(workdirPath)) {
+					if (logicalPaths != null && file.startsWith(workdirPath)) {
 						logicalPaths.put(absolute, toLogicalPath(workdirPath.relativize(file)));
 					}
 					return absolute;
@@ -315,7 +324,7 @@ abstract class AbstractClosureTemplatesCompilerMojo extends AbstractMojo {
 	/**
 	 * Joins the non-blank arguments into a single comma-separated list.
 	 */
-	private static String combine(String... values) {
+	protected static String combine(String... values) {
 		return Arrays.stream(values)
 				.filter(value -> !isBlank(value))
 				.collect(Collectors.joining(","));

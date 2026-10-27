@@ -28,12 +28,18 @@ public final class SoyFileDiscovery {
 
 	private static final String TOGGLES_EXTENSION = ".toggles";
 
+	private static final String CONFORMANCE_CONFIG_EXTENSION = ".textproto";
+
 	public static ImmutableSet<Path> findSoyFiles(Path basePath) {
 		return findFiles(basePath, SOY_EXTENSION);
 	}
 
 	public static ImmutableSet<Path> findTogglesFiles(Path basePath) {
 		return findFiles(basePath, TOGGLES_EXTENSION);
+	}
+
+	public static ImmutableSet<Path> findConformanceConfigFiles(Path basePath) {
+		return findFiles(basePath, CONFORMANCE_CONFIG_EXTENSION);
 	}
 
 	private static ImmutableSet<Path> findFiles(Path basePath, String extension) {

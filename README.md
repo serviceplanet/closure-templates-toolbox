@@ -4,9 +4,11 @@ This repository contains various tools for use with Google's [Closure Templates]
 
 * [Localization (L10n) support](#localization-l10n-support)
 * [Toggles (feature flags) support](#toggles-feature-flags-support)
+* [Conformance (lint rules) support](#conformance-lint-rules-support)
 * [Maven Plugins](#maven-plugins)
   * [Generate Bytecode from Soy](#soy-to-bytecode-goal)
   * [Extract Soy translation messages](#soy-to-icu-properties-goal)
+  * [Check conformance rules](#soy-conformance-checker-goal)
 
 ## Localization (L10n) support
 
@@ -112,6 +114,63 @@ sauce.renderTemplate(templateName)
 * Toggles are only usable on the Java backends.
   * The JS/incremental-DOM backend emits a `goog.require` for a module name matching Google's internal `ts_toggle_lib` build rule, which does not exist outside Google. The Python backend rejects toggle imports outright.
 
+## Conformance (lint rules) support
+
+### Why this exists
+
+Closure Templates can enforce project-specific rules on template source, such as "never call this function", "never use inline event handlers" or "every `<img>` must have an `alt` attribute". These rules are called conformance requirements. They are configured in a `soy.ConformanceConfig` text-format protocol buffer (see `conformance.proto` in Closure Templates) and each violation results in a compile error with the message you configure:
+
+```text
+requirement {
+  banned_html_tag {
+    tag: "marquee"
+    tag: "blink"
+  }
+  error_message: "Obsolete elements are not allowed."
+}
+requirement {
+  custom {
+    java_class: "com.google.template.soy.conformance.BanInlineEventHandlers"
+  }
+  error_message: "Inline event handlers are not allowed under our CSP. Use jsaction."
+  exempt: "nl/serviceplanet/app/legacy/"
+}
+```
+
+Only the `SoyConformanceChecker` tool runs these checks. The compilers which generate code do not take a conformance config, and the API to run the checks in-process is package-private. So out of the box conformance is a separate CLI invocation, which this toolbox integrates into the Maven build.
+
+### What this toolbox provides
+
+* The [`soy-conformance-checker`](#soy-conformance-checker-goal) Maven goal, which runs the `SoyConformanceChecker` against the templates at build time and fails the build on a violation.
+* Rules can be split over multiple config files, for example `conformance/security.textproto` and `conformance/style.textproto`. Pass them as a comma-separated list via `conformanceConfigs`, or let `conformanceConfigsBasePath` pick up every `*.textproto` file under a directory. The requirements of all config files are concatenated, so every template is checked against all of them.
+
+### Workflow
+
+1. Write the rules in one or more `.textproto` files under the `workdir`, for example `conformance/security.textproto` and `conformance/style.textproto`.
+2. Add the goal next to the goals which compile the templates. It takes the same source, dependency and toggles parameters, because the checker parses and type checks the templates the same way the compilers do:
+
+```xml
+<configuration>
+    <workdir>${soy.root}</workdir>
+    <soySourcesBasePath>.</soySourcesBasePath>
+    <conformanceConfigs>conformance/security.textproto,conformance/style.textproto</conformanceConfigs>
+</configuration>
+```
+
+3. Each violation is printed with its source location and the configured `error_message`, after which the goal fails the build:
+
+```text
+nl/serviceplanet/app/checkout.soy:14:5: error: Inline event handlers are not allowed under our CSP. Use jsaction.
+    <button onclick="buy()">Buy</button>
+            ^^^^^^^^^^^^^^^
+```
+
+### Things to be aware of
+
+* `exempt` and `only_apply_to` match on substrings of the path the Soy compiler knows a template by. With this plugin that is the workdir-relative path (see [How `workdir` works](#how-workdir-works)), so spell them relative to the `workdir`. For example `exempt: "nl/serviceplanet/app/legacy/"`.
+* A custom rule (`custom { java_class: "..." }`) must be a class in the package `com.google.template.soy.conformance` which is on the classpath of the plugin. For your own rules, add the JAR containing them as a `<dependency>` of the plugin declaration. The rules `BanInlineEventHandlers` and `RequireStrictHtml` ship with Closure Templates.
+* Conformance rules are checked on parsed and type checked templates. A template with a compile error is reported as such and prevents the conformance check from running.
+
 ## Maven Plugins
 
 Maven plugins to make Google's [Closure Templates](https://github.com/google/closure-templates) easier to use with Maven.
@@ -167,6 +226,39 @@ Extracts all `{msg}` messages from the given Soy templates into a Java propertie
             <messagePlugin>${soy.plugin}</messagePlugin>
         </configuration>
     </execution>
+</plugin>
+```
+
+### 'soy-conformance-checker' goal
+
+Checks the given Soy templates against conformance rules by running the `SoyConformanceChecker`, and fails the build on a violation. See [Conformance (lint rules) support](#conformance-lint-rules-support) for the rule format.
+
+In addition to the shared parameters it takes:
+
+* `conformanceConfigs`: comma-separated list of conformance config files (`soy.ConformanceConfig` messages in protocol buffer text format). Relative paths are resolved against `workdir`.
+* `conformanceConfigsBasePath`: directory which is searched recursively for `*.textproto` files. Can be combined with `conformanceConfigs`.
+
+At least one of the two must be set.
+
+```xml
+<plugin>
+    <groupId>nl.serviceplanet.maven</groupId>
+    <artifactId>closure-templates-maven-plugin</artifactId>
+    <version>[REPLACE WITH VERSION]</version>
+    <executions>
+        <execution>
+            <id>soy-conformance</id>
+            <goals>
+                <goal>soy-conformance-checker</goal>
+            </goals>
+            <phase>verify</phase>
+            <configuration>
+                <workdir>${soy.root}</workdir>
+                <soySourcesBasePath>.</soySourcesBasePath>
+                <conformanceConfigs>conformance/security.textproto,conformance/style.textproto</conformanceConfigs>
+            </configuration>
+        </execution>
+    </executions>
 </plugin>
 ```
 
